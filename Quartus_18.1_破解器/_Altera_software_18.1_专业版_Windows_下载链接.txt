@@ -1,0 +1,49 @@
+必装组件（根据自己用的器件来选择Standard版或者Pro版，建议Arria 10用户2个都安装 ）：
+
+Quartus Prime Pro Edition （备注：Pro版只支持Stratix 10、Arria 10和Cyclone 10 GX的器件库）。
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/QuartusProSetup-18.1.0.222-windows.exe   3.35GB
+
+强烈建议安装帮助文件：
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/QuartusProHelpSetup-18.1.0.222-windows.exe    46MB
+
+器件库（不用全装，用哪个系列的器件就安装哪个系列的器件库，至少安装一个，否则上面的Quartus无法正常使用）
+Arria 10
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/arria10-18.1.0.222.qdz   6.2GB
+Cyclone 10 GX
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/cyclone10gx-18.1.0.222.qdz     3.19GB
+Stratix 10
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/stratix10-18.1.0.222.qdz	15.27GB
+
+
+选装组件：
+
+DSP Builder（是MATLAB的插件，可以把*.m格式原理图直接转HDL源码，可以不装，主要用于信号处理类产品开发）
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/DSPBuilderProSetup-18.1.0.222-windows.exe    56MB
+
+SOC（必须装才能开发集成高性能硬核Cortex-A的SOC FPGA，内含全世界最厉害的ARM开发工具--来自ARM公司的DS-5安装包）
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/SoCEDSProSetup-18.1.0.222-windows.exe     2.71GB
+
+AdvLinkAnalyzer（原名JNEye，用于FPGA高速收发器的PCB级的仿真和分析，如果不用FPGA的高速收发器，就不用安装这个工具）
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/AdvLinkAnalyzerProSetup-18.1.0.222-windows.exe     1.82GB
+
+OpenCL（用C语言开发FPGA的工具，从17.1版开始已经免费了，可以不装，主要用于信号处理和科学计算类产品开发）：
+Intel FPGA SDK for OpenCL Pro Edition
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/AOCLProSetup-18.1.0.222-windows.exe    1.06GB
+Intel FPGA Runtime Environment for OpenCL Linux x86-64 RPM
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/aocl-pro-rte-18.1.0-222.x86_64.rpm     2MB
+Intel FPGA Runtime Environment for OpenCL Linux Cyclone V SoC TGZ
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/aocl-pro-rte-18.1.0-222.arm32.tgz	1MB
+Intel FPGA Runtime Environment for OpenCL Linux x86-64
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/aocl-pro-rte-18.1.0.222-linux.run	11MB
+Intel FPGA Runtime Environment for OpenCL Windows x86-64
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/aocl-pro-rte-18.1.0.222-windows.exe	12MB
+
+ModelSim AE/ASE（对于绝大部分用户来说，不需要破解ModelSim，大家可以用免费的ModelSim-Altera Starter Edition，也就是入门版，可以仿真一万行可执行代码（这一万行是指不包括注释，纯的代码）。只有非常大的设计才需要用ModelSim-Altera Edition或者ModelSim-SE版，这2种版本才需要破解，破解器自己搜索，本人不提供。）       
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/ModelSimProSetup-18.1.0.222-windows.exe    2.15GB
+http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/modelsim-part2-18.1.0.222-windows.qdz    2.04GB
+
+Quartus Prime Programmer and Tools（建议工厂烧写流水线上安装，普通开发者不要安装，因为Quartus Prime各个版本都已经集成了此工具） 
+（64位）http://download.altera.com/akdlm/software/acdsinst/18.1/222/ib_installers/QuartusProProgrammerSetup-18.1.0.222-windows.exe   385MB
+
+硬盘空间：完全安装Altera全部设计套装 v18.1 对于您要安装软件的硬盘或者分区，大约需要35GB的可用硬盘空间。
+操作系统要求：必须是64位的Windows 7或者8.1或者10或者Windows Server 2008 R2 SP1 Enterprise，推荐专业版或者更高版本。不建议使用家庭版，特别是针对SOC开发。

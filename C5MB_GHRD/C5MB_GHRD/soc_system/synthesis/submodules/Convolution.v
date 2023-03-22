@@ -1,0 +1,243 @@
+module  Convolution #(
+    parameter                       WeightMemAddr   =   64'h0,
+    parameter                       ShareMemAddr0    =   64'h0,
+	 parameter                       ShareMemAddr1    =   64'h0
+)   (
+    input   wire                    clk,
+    input   wire                    rstn,
+
+    //  Config Information
+    input   wire                    Share_i,
+    input   wire    [2:0]           ConvSize_i,
+    input   wire    [3:0]           DataBp_i,
+    input   wire    [3:0]           WeightBp_i,
+    input   wire    [3:0]           ResultBp_i,
+    input   wire    [8:0]           Height_i,
+    input   wire    [3:0]           CoreEnable_i,
+    input   wire                    AccuEn_i,
+
+    //  HandShake With BusInterface
+    input   wire                    Req_i,
+    output  wire                    Ack_o,
+
+    //  ShareBus
+    output  wire    [63:0]          AvalonAddr_o,
+    output  wire                    AvalonRead_o,
+    output  wire                    AvalonWrite_o,
+    output  wire    [63:0]         AvalonByteEnable_o,
+    // output  wire    [1023:0]        AvalonWriteData_o,
+    // input   wire    [1023:0]        AvalonReadData_i,
+    output  wire    [511:0]        AvalonWriteData_o,
+    input   wire    [511:0]        AvalonReadData_i,	
+    output  wire                    AvalonLock_o,
+    input   wire                    AvalonWaitReq_i
+
+);
+
+genvar i;
+
+//  TOP FSM
+wire    CoreState;
+wire    CoreDone;
+
+ConvDFF #(
+    .WIDTH              (1),
+    .RstVal             (1'b0),
+    .PstVal             (1'b0)
+) CS (           
+    .clk                (clk),    
+    .rstn               (rstn),    
+    .Set_i              (CoreState & CoreDone),   
+    .Enable_i           (Req_i & CoreEnable_i[0]),   
+    .D_i                (1'b1),   
+    .Q_o                (CoreState)
+);
+
+wire    CoreStateReg;
+
+ConvDFF #(
+    .WIDTH              (1),
+    .RstVal             (1'b0),
+    .PstVal             (1'b0)
+) CSR (           
+    .clk                (clk),    
+    .rstn               (rstn),    
+    .Set_i              (1'b0),   
+    .Enable_i           (1'b1),   
+    .D_i                (CoreState),   
+    .Q_o                (CoreStateReg)
+);
+
+assign  Ack_o   =   (CoreStateReg) & (~CoreState);
+
+//  Config Information Reg
+wire                Share;
+wire    [2:0]       ConvSize;
+wire    [3:0]       DataBp;
+wire    [3:0]       WeightBp;
+wire    [3:0]       ResultBp;
+wire    [8:0]       Height;  
+wire                AccuEn;
+
+ConvDFF #(
+    .WIDTH                      (26),
+    .RstVal                     (1'b0),
+    .PstVal                     (1'b0)
+) CFG (                   
+    .clk                        (clk),    
+    .rstn                       (rstn),    
+    .Set_i                      (1'b0),   
+    .Enable_i                   (Req_i),   
+    .D_i                        ({Share_i,ConvSize_i,DataBp_i,WeightBp_i,ResultBp_i,Height_i,AccuEn_i}),   
+    .Q_o                        ({Share,ConvSize,DataBp,WeightBp,ResultBp,Height,AccuEn})
+);
+
+wire                Start;
+
+ConvDFF #(
+    .WIDTH                      (1),
+    .RstVal                     (1'b0),
+    .PstVal                     (1'b0)
+) RG (           
+    .clk                        (clk),    
+    .rstn                       (rstn),    
+    .Set_i                      (1'b0),   
+    .Enable_i                   (1'b1),   
+    .D_i                        (Req_i),   
+    .Q_o                        (Start)
+);
+
+//  Share Read Master
+wire    [63:0]      ShareAddr;
+wire                ShareRead;
+wire                ShareWrite;
+wire    [63:0]     ShareByteEnable;
+// wire    [1023:0]    ShareWriteData;
+// wire    [1023:0]    ShareReadData;
+wire    [511:0]    ShareWriteData;
+wire    [511:0]    ShareReadData;
+wire                ShareLock;
+wire                ShareWaitReq;
+
+wire                ShareValid;
+// wire    [1023:0]    ShareLine;
+wire    [511:0]    ShareLine;
+wire                ShareFirst;
+wire                ShareLast;
+// wire    [1023:0]    WBLine;
+wire    [511:0]    WBLine;
+wire                Halt;
+wire                WBReady;
+wire                WBValid;
+
+ShareReadMaster #(
+    .InitialDataAddr            (ShareMemAddr0),
+    .InitialWeightAddr          (WeightMemAddr)
+)   SRM (
+    .clk                        (clk),
+    .rstn                       (rstn),
+    .Start_i                    (Start),
+    .Height_i                   (Height),
+    .Share_i                    (Share),
+    .Halt_i                     (Halt),
+    .WBReady_o                  (WBReady),
+    .AvalonAddr_o               (ShareAddr),
+    .AvalonRead_o               (ShareRead),
+    .AvalonWrite_o              (ShareWrite),
+    .AvalonByteEnable_o         (ShareByteEnable),
+    .AvalonWriteData_o          (ShareWriteData),
+    .AvalonReadData_i           (ShareReadData),
+    .AvalonLock_o               (ShareLock),
+    .AvalonWaitReq_i            (ShareWaitReq),
+    .IBValid_o                  (ShareValid),
+    .IBLine_o                   (ShareLine),  
+    .IBFirst_o                  (ShareFirst),
+    .IBLast_o                   (ShareLast),
+    .WBLine_o                   (WBLine),
+    .WBValid_o                  (WBValid)          
+);
+
+//  Weight Buffer
+// wire    [1023:0]     Weight0;
+wire    [511:0]     Weight0;
+
+WgtBuffer   WgtB(
+    .clk                        (clk),
+    .rstn                       (rstn),
+    .ShareMstLine_i             (WBLine),
+    .ShareMstValid_i            (WBValid),
+    .Weight0_o                  (Weight0)
+);
+
+//  ConvCore 0
+wire    [63:0]          WriteAddr;
+wire                    WriteRead;
+wire                    WriteWrite;
+wire    [63:0]         WriteByteEnable;
+// wire    [1023:0]        WriteWriteData;
+// wire    [1023:0]        WriteReadData;
+wire    [511:0]        WriteWriteData;
+wire    [511:0]        WriteReadData;
+wire                    WriteLock;
+wire                    WriteWaitReq;
+
+ConvCore    #(
+    .PrivateMemAddr             (ShareMemAddr1)
+)   Core0 (
+    .clk                        (clk),
+    .rstn                       (rstn),
+    .ConvSize_i                 (ConvSize),
+    .DataBp_i                   (DataBp),
+    .WeightBp_i                 (WeightBp),
+    .ResultBp_i                 (ResultBp),
+    .Height_i                   (Height),
+    .AccuEn_i                   (AccuEn),
+    .Start_i                    (WBReady),
+    .Done_o                     (CoreDone),
+    .ShareValid_i               (ShareValid),
+    .ShareLine_i                (ShareLine),
+    .ShareFirst_i               (ShareFirst),
+    .ShareLast_i                (ShareLast),
+    .AvalonAddr_o               (WriteAddr),
+    .AvalonRead_o               (WriteRead),
+    .AvalonWrite_o              (WriteWrite),
+    .AvalonByteEnable_o         (WriteByteEnable),
+    .AvalonWriteData_o          (WriteWriteData),
+    .AvalonReadData_i           (WriteReadData),
+    .AvalonLock_o               (WriteLock),
+    .AvalonWaitReq_i            (WriteWaitReq),
+    .Weight_i                   (Weight0),
+    .Halt_o                     (Halt)
+);
+
+CoreMaster  CoreMst (
+    .clk                        (clk),
+    .rstn                       (rstn),
+    .RdMstAddr_i                (ShareAddr),
+    .RdMstRead_i                (ShareRead),
+    .RdMstWrite_i               (ShareWrite),
+    .RdMstByteEnable_i          (ShareByteEnable),
+    .RdMstWriteData_i           (ShareWriteData),
+    .RdMstReadData_o            (ShareReadData),
+    .RdMstLock_i                (ShareLock),
+    .RdMstWaitReq_o             (ShareWaitReq),
+    .WrMstAddr_i                (WriteAddr),
+    .WrMstRead_i                (WriteRead),
+    .WrMstWrite_i               (WriteWrite),
+    .WrMstByteEnable_i          (WriteByteEnable),
+    .WrMstWriteData_i           (WriteWriteData),
+    .WrMstReadData_o            (WriteReadData),
+    .WrMstLock_i                (WriteLock),
+    .WrMstWaitReq_o             (WriteWaitReq),
+    .AvalonAddr_o               (AvalonAddr_o),
+    .AvalonRead_o               (AvalonRead_o),
+    .AvalonWrite_o              (AvalonWrite_o),
+    .AvalonByteEnable_o         (AvalonByteEnable_o),
+    .AvalonWriteData_o          (AvalonWriteData_o),
+    .AvalonReadData_i           (AvalonReadData_i),
+    .AvalonLock_o               (AvalonLock_o),
+    .AvalonWaitReq_i            (AvalonWaitReq_i)
+);
+
+
+endmodule

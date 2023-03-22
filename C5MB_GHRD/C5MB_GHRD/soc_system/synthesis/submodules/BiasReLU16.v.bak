@@ -1,0 +1,55 @@
+module  BiasReLu16(
+
+input   wire  [7:0]           Data16_i,
+input   wire  [7:0]           Bias_i,
+input   wire                   ReLUMod_i,
+input   wire  [3:0]            Data_Bp_i,
+input   wire  [3:0]            Weight_Bp_i,
+input   wire  [3:0]            Result_Bp_i,
+
+input   wire                    BiasEn_i,
+input   wire                    ReLUEn_i,
+
+output   wire    [7:0]          Result16_o
+
+);
+
+
+
+
+
+wire    [7:0]           FixPointAdder_o ;
+
+FixPointAdder   FixPointAdder_inst(
+        .Data_i(Data16_i),
+        .Weight_i(Bias_i),
+        .Data_Bp_i(Data_Bp_i),
+        .Weight_Bp_i(Weight_Bp_i),
+        .Result_Bp_i(Result_Bp_i),
+        .Q_o(FixPointAdder_o)
+
+);
+
+wire    [7:0]           ReLU_i;
+
+assign  ReLU_i          =      BiasEn_i     ?   FixPointAdder_o   : Data16_i ;     //判断是否加偏置
+wire    [7:0]           ReLU_o ;
+
+ReLU #(
+    .WIDTH (8)
+
+)
+ReLU_inst(
+    .Data_i(ReLU_i),
+    .ReLUMod_i(ReLUMod_i),
+    .Data_Bp_i(Data_Bp_i),
+    .Result_Bp_i(Result_Bp_i),
+    
+    .Q_o(ReLU_o)
+
+);
+
+assign  Result16_o          =      ReLUEn_i     ?      ReLU_o       :     ReLU_i        ;       //判断是否加RELU
+
+
+endmodule

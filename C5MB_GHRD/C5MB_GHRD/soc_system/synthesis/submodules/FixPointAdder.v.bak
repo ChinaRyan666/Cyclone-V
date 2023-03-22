@@ -1,0 +1,47 @@
+module  FixPointAdder(
+    input   wire signed   [7:0]              Data_i,
+    input   wire signed   [7:0]              Weight_i,
+    input   wire    [3:0]               Data_Bp_i,
+    input   wire    [3:0]               Weight_Bp_i,
+    input   wire    [3:0]               Result_Bp_i,
+    output  wire signed  [7:0]              Q_o
+
+);
+
+// wire                Sd,Sw,Sr;           //保存符号位
+
+// assign  Sd      =   Data_i[7];      //数据符号位
+// assign  Sw      =   Weight_i[7];    //权重符号位
+
+
+//数据绝对值，抹去符号位，采用32bit寄存器，小数点在中间，第 16 位
+// wire    [30:0]      AbsD;
+// wire    [30:0]      AbsW;
+
+// assign  AbsD    =   Data_i  [14:0] <<  (5'd16   -   Data_Bp_i); 
+// assign  AbsW    =   Weight_i[14:0] <<  (5'd16   -   Weight_Bp_i); 
+
+// wire                Big0,NeS;
+
+// assign  NeS     =   Sd ^ Sw;
+// assign  Big0    =   AbsD > AbsW;
+
+// wire    [30:0] AbsResult;
+
+// assign  AbsResult   =   ~NeS    ?   AbsD + AbsW :   (
+                        // Big0    ?   AbsD - AbsW :   AbsW - AbsD) ;
+
+// wire    SResult;
+
+// assign  SResult =   ~NeS    ?   Sd  :   (
+                    // Big0    ?   Sd  :   Sw);
+
+//输出对齐
+// wire    [14:0] AbsResult_15;
+// assign  AbsResult_15   = AbsResult >> (5'd16   -   Result_Bp_i)  ;                    
+
+// assign  Q_o =   {SResult,AbsResult_15};
+
+assign Q_o=Data_i+Weight_i;
+
+endmodule

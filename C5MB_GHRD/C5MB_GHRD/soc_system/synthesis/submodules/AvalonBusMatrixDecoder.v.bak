@@ -1,0 +1,51 @@
+module AvalonBusMatrixDecoder #(
+	parameter					Port0En	=	1'b1,
+	parameter					Port1En	=	1'b1,
+	parameter					MstID	=	3'h0
+)	(
+	//	System Signals
+	input	wire				clk,
+	input	wire				rstn,
+
+	//	Master Input Signals
+	input	wire	[63:0]		Addr_i,
+	input	wire				RdEn_i,
+	input	wire				WrEn_i,
+
+	//	Slave 0 Input Signals
+	input	wire	[511:0]	RdData0_i,
+	input	wire				WaitReq0_i,
+	input	wire	[2:0]		PortSel0_i,
+
+	//	Slave 1 Input Signals
+	input	wire	[511:0]	RdData1_i,
+	input	wire				WaitReq1_i,
+	input	wire	[2:0]		PortSel1_i,
+
+	//	Request Signals
+	output	wire				Req0_o,
+	output	wire				Req1_o,
+
+	//	Master Output Signals
+	output	wire	[511:0]	RdDataDec_o,
+	output	wire				WaitReq_o
+);
+
+assign	Req0_o	=	(Addr_i[9:9]	==	1'h0)	&	Port0En	&	(RdEn_i	|	WrEn_i);
+assign	Req1_o	=	(Addr_i[9:9]	==	1'h1)	&	Port1En	&	(RdEn_i	|	WrEn_i);
+
+reg	[1:0]	Sel;
+
+always@(posedge clk or negedge rstn)
+	if(~rstn)
+		Sel	<=	2'b0;
+	else if(~WaitReq_o)
+		Sel	<=	{Req0_o, Req1_o};
+
+assign	RdDataDec_o	=	({512{Sel[0]}}	&	RdData1_i)	|
+						({512{Sel[1]}}	&	RdData0_i)	;
+
+assign	WaitReq_o	=	(Req0_o	&	((PortSel0_i	!=	MstID)	|	WaitReq0_i))	|
+						(Req1_o	&	((PortSel1_i	!=	MstID)	|	WaitReq1_i))	;
+
+endmodule

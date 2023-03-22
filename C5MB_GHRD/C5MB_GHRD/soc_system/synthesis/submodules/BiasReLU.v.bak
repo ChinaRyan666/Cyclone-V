@@ -1,0 +1,113 @@
+module	BiasReLU	#(
+    parameter       BUSWIDTH            =      512   
+)  	(
+	//Clock&Reset
+    input                   clk,
+    input                   rstn,
+ 
+    input   wire  [7:0]                    Bias_i,
+    input   wire                            ReLUMod_i,
+
+    input   wire  [3:0]                     Data_Bp_i,
+    input   wire  [3:0]                     Weight_Bp_i,
+    input   wire  [3:0]                     Result_Bp_i,
+
+    input   wire                            BiasEn_i,
+    input   wire                            ReLUEn_i,
+
+    //  Data 
+    input   wire     [BUSWIDTH-1:0]         Data_i,
+    input   wire                            Data_en_i,  
+
+    //  Result
+    output   wire    [BUSWIDTH-1:0]        Result_o,
+
+    input   wire                            BR_Start_i,
+    output   wire                           BR_Done_o        
+
+   
+);
+
+genvar i;
+
+reg                   RBstate  ;
+reg [2:0]              cnt    ;
+
+wire  [BUSWIDTH-1:0]        Result128  ;  
+reg   [BUSWIDTH-1:0]        Result128_r;  //存储一次
+reg                         BR_Done;
+
+always@(posedge clk or negedge rstn) 
+begin
+    if(~rstn) 
+        RBstate    <=  1'b0;      
+    else if(BR_Start_i)    
+        RBstate <=   1'b1;  
+    else if(BR_Done_o)     
+        RBstate <=   1'b0;  
+end
+
+//master数据重组
+reg  [BUSWIDTH-1:0]         Data128  ;
+
+always@(posedge clk or negedge rstn) 
+begin
+    if(~rstn)
+        Data128    <=  {BUSWIDTH{1'b0}};  
+    else if(Data_en_i)
+        Data128   <=   Data_i  ;
+end
+
+
+
+generate
+for(i = 0;i < (BUSWIDTH/8);i = i + 1)  
+begin: BiasReLu16_ntimes
+BiasReLu16  BiasReLu16_inst(
+
+    .Data16_i               (Data128[i*8+7:i*8]),
+
+    .Bias_i                 (Bias_i),
+    .ReLUMod_i              (ReLUMod_i),
+    
+    .Data_Bp_i              (Data_Bp_i),
+    .Weight_Bp_i            (Weight_Bp_i),
+    .Result_Bp_i            (Result_Bp_i),
+    .BiasEn_i               (BiasEn_i),
+    .ReLUEn_i               (ReLUEn_i),
+
+    .Result16_o             (Result128[i*8+7:i*8])
+
+);
+end
+endgenerate
+
+
+//数据重组
+always@(posedge clk or negedge rstn) 
+begin
+    if(~rstn)
+    begin
+        Result128_r     <= {BUSWIDTH{1'b0}}   ;  
+			cnt        <=  3'd0;  
+    end
+	 
+	 else if(  RBstate	)
+	 begin
+			cnt     <=   cnt    +   3'd1    ;
+			Result128_r   <=   Result128    ; 
+	 end
+		else	
+			cnt        <=  3'd0;  
+		  
+end
+
+
+assign  BR_Done_o   = 	(cnt==3'd3) 	? 	 1'b1	:	1'b0	 ;
+
+
+assign  Result_o   =   Result128_r ;
+
+      
+
+endmodule

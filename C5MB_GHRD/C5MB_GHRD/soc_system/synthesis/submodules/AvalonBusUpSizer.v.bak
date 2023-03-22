@@ -1,0 +1,51 @@
+module AvalonBusUpSizer (
+    input   wire                    clk,
+    input   wire                    rstn,
+
+    input   wire    [14:0]          SlaveAddr_i,
+    input   wire                    SlaveRead_i,
+    input   wire                    SlaveWrite_i,
+    input   wire    [15:0]          SlaveByteEnable_i,
+    input   wire    [127:0]         SlaveWriteData_i,
+    output  wire    [127:0]         SlaveReadData_o,
+    output  wire                    SlaveWaitReq_o,
+
+    output  wire    [63:0]          MasterAddr_o,
+    output  wire                    MasterRead_o,
+    output  wire                    MasterWrite_o,
+    output  wire    [63:0]         MasterByteEnable_o,
+    output  wire    [512:0]        MasterWriteData_o,
+    input   wire    [512:0]        MasterReadData_i,
+    input   wire                    MasterWaitReq_i
+);
+
+assign  MasterAddr_o    =   {52'b0,SlaveAddr_i[14:3]};
+
+assign  MasterRead_o    =   SlaveRead_i;
+
+assign  MasterWrite_o   =   SlaveWrite_i;
+
+genvar i;
+
+generate
+    for(i = 0;i < 8;i = i + 1) begin: ByteEn
+
+        assign  MasterByteEnable_o[i*8+7:i*8]    =   {8{SlaveAddr_i[2:0]    ==  i}} &   SlaveByteEnable_i;
+
+    end
+endgenerate
+
+assign  MasterWriteData_o   =   {4{SlaveWriteData_i}};
+
+assign  SlaveReadData_o     =   ({64{SlaveAddr_i[2:0] ==  3'b000}}    &   MasterReadData_i[63:0   ])     |
+                                ({64{SlaveAddr_i[2:0] ==  3'b001}}    &   MasterReadData_i[127:64 ])   |
+                                ({64{SlaveAddr_i[2:0] ==  3'b010}}    &   MasterReadData_i[191:128 ])   |
+                                ({64{SlaveAddr_i[2:0] ==  3'b011}}    &   MasterReadData_i[255:192 ])   |
+                                ({64{SlaveAddr_i[2:0] ==  3'b100}}    &   MasterReadData_i[319:256 ])   |
+                                ({64{SlaveAddr_i[2:0] ==  3'b101}}    &   MasterReadData_i[383:320 ])   |
+                                ({64{SlaveAddr_i[2:0] ==  3'b110}}    &   MasterReadData_i[447:384 ])   |
+                                ({64{SlaveAddr_i[2:0] ==  3'b111}}    &   MasterReadData_i[511:448])  ;
+
+assign  SlaveWaitReq_o      =   MasterWaitReq_i;
+
+endmodule

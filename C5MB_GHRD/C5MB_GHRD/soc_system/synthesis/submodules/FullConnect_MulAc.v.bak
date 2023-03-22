@@ -1,0 +1,560 @@
+module  FullConnect_MulAc #(
+    parameter                       AvalonData_WIDTH        =   512
+)  (
+    input   wire                    clk,
+    input   wire                    rstn,
+    input   wire                    Start_i,
+    input   wire                    Halt_i  ,
+    input   wire                    Accu_i,
+    input   wire    [3:0]           DataBp_i,
+    input   wire    [3:0]           WeightBp_i,
+    input   wire    [3:0]           ResultBp_i,
+    input   wire                    WgtValid_i ,
+    input   wire                    DataValid_i,
+    input   wire                    DataDone_i ,
+    input   wire    [AvalonData_WIDTH-1:0]         Weight_i,
+    input   wire    [AvalonData_WIDTH-1:0]         Data_i,
+    
+  
+    output  wire    [15:0]          MulAc_o,
+    output  wire                    Result_valid_o
+    
+
+);
+
+localparam MULT_INPUT_WIDTH = 8;
+localparam MULT_OUTPUT_WIDTH = 36;
+localparam BUS_WIDTH = AvalonData_WIDTH;
+localparam DATA_WIDTH = 8;
+localparam BUS_DIV_DATA = BUS_WIDTH / DATA_WIDTH;//64
+localparam MULT_CYCLE_NUM = BUS_DIV_DATA;//64
+localparam ADDER0_CYCLE_NUM = MULT_CYCLE_NUM/2;//32
+localparam ADDER1_CYCLE_NUM = ADDER0_CYCLE_NUM/2;//16
+localparam ADDER2_CYCLE_NUM = ADDER1_CYCLE_NUM/2;//8
+localparam ADDER3_CYCLE_NUM = ADDER2_CYCLE_NUM/2;//4
+localparam ADDER4_CYCLE_NUM = ADDER3_CYCLE_NUM/2;//2
+localparam ADDER5_CYCLE_NUM = ADDER4_CYCLE_NUM/2;//1
+localparam ADD_DATA_WIDTH = MULT_OUTPUT_WIDTH;//36
+localparam MULT_DATA_WIDTH = MULT_OUTPUT_WIDTH*BUS_DIV_DATA;   //2304 
+localparam ADD_STAGE0_DATA_WIDTH = MULT_DATA_WIDTH/2;    //1152
+localparam ADD_STAGE1_DATA_WIDTH = ADD_STAGE0_DATA_WIDTH/2; //576
+localparam ADD_STAGE2_DATA_WIDTH = ADD_STAGE1_DATA_WIDTH/2; //288
+localparam ADD_STAGE3_DATA_WIDTH = ADD_STAGE2_DATA_WIDTH/2; //144  
+localparam ADD_STAGE4_DATA_WIDTH = ADD_STAGE3_DATA_WIDTH/2; //72  
+localparam ADD_STAGE5_DATA_WIDTH = ADD_STAGE4_DATA_WIDTH/2;   //36
+localparam ADD_STAGE6_DATA_WIDTH = ADD_DATA_WIDTH;   //36
+localparam ADD_STAGE7_DATA_WIDTH = ADD_DATA_WIDTH;   //36
+
+wire[AvalonData_WIDTH-1:0] P0Weight;
+wire[AvalonData_WIDTH-1:0] P0Data;
+wire                P0WgtValid,P0DataValid,P0DataDone;
+FullConnectDFF #(
+    .WIDTH                          (AvalonData_WIDTH),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   Weight_i_reg(
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (WgtValid_i),
+    .D_i                            (Weight_i),
+    .Q_o                            (P0Weight)
+);
+
+FullConnectDFF #(
+    .WIDTH                          (AvalonData_WIDTH),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   Data_i_reg(
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (DataValid_i),
+    .D_i                            (Data_i),
+    .Q_o                            (P0Data)
+);
+
+FullConnectDFF #(
+    .WIDTH                          (3),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P0 (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i),
+    .D_i                            ({WgtValid_i,DataValid_i,DataDone_i}),
+    .Q_o                            ({P0WgtValid,P0DataValid,P0DataDone})
+);
+
+//  Multipy
+//wire    [2303:0]    MultOut;
+wire    [MULT_DATA_WIDTH-1:0]    MultOut;
+genvar i;
+generate 
+    for(i = 0;i < MULT_CYCLE_NUM;i = i + 1) begin : Multipy                         
+        Multiplier  #(
+            .OPWIDTH                (MULT_INPUT_WIDTH),
+            .RSWIDTH                (MULT_OUTPUT_WIDTH)
+        )   Mult (
+            .D0_i                   (P0Data[MULT_INPUT_WIDTH*(i+1)-1:MULT_INPUT_WIDTH*i]),
+            .D1_i                   (P0Weight[MULT_INPUT_WIDTH*(i+1)-1:MULT_INPUT_WIDTH*i]),
+            .Q_o                    (MultOut[MULT_OUTPUT_WIDTH*(i+1)-1:MULT_OUTPUT_WIDTH*i])
+        );
+    end
+endgenerate
+
+//  pipline1: mult
+wire    [MULT_DATA_WIDTH-1:0]    P1Val;
+wire                P1WgtValid,P1DataValid,P1DataDone;
+
+FullConnectDFF #(
+    .WIDTH                          (MULT_DATA_WIDTH),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P1_Data (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i & P0DataValid),
+    .D_i                            (MultOut),
+    .Q_o                            (P1Val)
+);
+
+FullConnectDFF #(
+    .WIDTH                          (3),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P1_Ctrl (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i),
+    .D_i                            ({P0WgtValid,P0DataValid,P0DataDone}),
+    .Q_o                            ({P1WgtValid,P1DataValid,P1DataDone})
+);
+//  Adder Stage0 
+wire    [ADD_STAGE0_DATA_WIDTH-1:0]    AddOut0;
+genvar j;
+generate
+    for(j = 0;j < ADDER0_CYCLE_NUM;j = j + 1) begin : AddStg0       //32               
+        Adder #(
+            .WIDTH                  (ADD_DATA_WIDTH)
+        )   AdderS0 (
+            .D0_i                   (P1Val[ADD_DATA_WIDTH*(2*j+1)-1:ADD_DATA_WIDTH*(2*j)]),
+            .D1_i                   (P1Val[ADD_DATA_WIDTH*(2*j+2)-1:ADD_DATA_WIDTH*(2*j+1)]),
+            .Q_o                    (AddOut0[ADD_DATA_WIDTH*(j+1)-1:ADD_DATA_WIDTH*j])
+        );
+    end
+endgenerate
+
+//  pipline2
+wire    [ADD_STAGE0_DATA_WIDTH-1:0]     P2Val;
+wire                P2WgtValid,P2DataValid,P2DataDone;
+
+FullConnectDFF #(
+    .WIDTH                          (ADD_STAGE0_DATA_WIDTH),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P2_Data (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i & P1DataValid),
+    .D_i                            (AddOut0),
+    .Q_o                            (P2Val)
+);
+
+FullConnectDFF #(
+    .WIDTH                          (3),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P2_Ctrl (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i),
+    .D_i                            ({P1WgtValid,P1DataValid,P1DataDone}),
+    .Q_o                            ({P2WgtValid,P2DataValid,P2DataDone})
+);
+//  Adder Stage1 
+wire    [ADD_STAGE1_DATA_WIDTH-1:0]     AddOut1;
+genvar k;
+generate
+    for(k = 0;k < ADDER1_CYCLE_NUM;k = k + 1) begin : AddStg1        //16               
+        Adder #(
+            .WIDTH                  (ADD_DATA_WIDTH)
+        )   AdderS1 (
+            .D0_i                   (P2Val[ADD_DATA_WIDTH*(2*k+1)-1:ADD_DATA_WIDTH*(2*k)]),
+            .D1_i                   (P2Val[ADD_DATA_WIDTH*(2*k+2)-1:ADD_DATA_WIDTH*(2*k+1)]),
+            .Q_o                    (AddOut1[ADD_DATA_WIDTH*(k+1)-1:ADD_DATA_WIDTH*k])
+        );
+    end
+endgenerate
+
+//  pipline3
+wire    [ADD_STAGE1_DATA_WIDTH-1:0]     P3Val;
+wire                P3WgtValid,P3DataValid,P3DataDone;
+
+FullConnectDFF #(
+    .WIDTH                          (ADD_STAGE1_DATA_WIDTH),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P3_Data (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i & P2DataValid),
+    .D_i                            (AddOut1),
+    .Q_o                            (P3Val)
+);
+
+FullConnectDFF #(
+    .WIDTH                          (3),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P3_Ctrl (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i),
+    .D_i                            ({P2WgtValid,P2DataValid,P2DataDone}),
+    .Q_o                            ({P3WgtValid,P3DataValid,P3DataDone})
+);
+
+// Adder Stage2                                            
+
+wire    [ADD_STAGE2_DATA_WIDTH-1:0]     AddOut2;
+genvar m;
+generate
+    for(m = 0;m < ADDER2_CYCLE_NUM;m = m + 1) begin : AddStg2                       // 8
+        Adder #(
+            .WIDTH                  (ADD_DATA_WIDTH)
+        )   AdderS2 (
+            .D0_i                   (P3Val[ADD_DATA_WIDTH*(2*m+1)-1:ADD_DATA_WIDTH*(2*m)]),
+            .D1_i                   (P3Val[ADD_DATA_WIDTH*(2*m+2)-1:ADD_DATA_WIDTH*(2*m+1)]),
+            .Q_o                    (AddOut2[ADD_DATA_WIDTH*(m+1)-1:ADD_DATA_WIDTH*m])
+        );
+    end
+endgenerate
+
+//  pipline4
+wire    [ADD_STAGE2_DATA_WIDTH-1:0]     P4Val;
+wire                P4WgtValid,P4DataValid,P4DataDone;
+
+FullConnectDFF #(
+    .WIDTH                          (ADD_STAGE2_DATA_WIDTH),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P4_Data (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i & P3DataValid),
+    .D_i                            (AddOut2),
+    .Q_o                            (P4Val)
+);
+
+FullConnectDFF #(
+    .WIDTH                          (3),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P4_Ctrl (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i),
+    .D_i                            ({P3WgtValid,P3DataValid,P3DataDone}),
+    .Q_o                            ({P4WgtValid,P4DataValid,P4DataDone})
+);
+
+// Adder Stage3                                            
+
+wire    [ADD_STAGE3_DATA_WIDTH-1:0]     AddOut3;
+genvar a;
+generate
+    for(a = 0;a < ADDER3_CYCLE_NUM;a = a + 1) begin : AddStg3                       // 4
+        Adder #(
+            .WIDTH                  (ADD_DATA_WIDTH)
+        )   AdderS3 (
+            .D0_i                   (P4Val[ADD_DATA_WIDTH*(2*a+1)-1:ADD_DATA_WIDTH*(2*a)]),
+            .D1_i                   (P4Val[ADD_DATA_WIDTH*(2*a+2)-1:ADD_DATA_WIDTH*(2*a+1)]),
+            .Q_o                    (AddOut3[ADD_DATA_WIDTH*(a+1)-1:ADD_DATA_WIDTH*a])
+        );
+    end
+endgenerate
+
+//  pipline5
+wire    [ADD_STAGE3_DATA_WIDTH-1:0]     P5Val;
+wire                P5WgtValid,P5DataValid,P5DataDone;
+
+FullConnectDFF #(
+    .WIDTH                          (ADD_STAGE3_DATA_WIDTH),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P5_Data (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i & P4DataValid),
+    .D_i                            (AddOut3),
+    .Q_o                            (P5Val)
+);
+
+FullConnectDFF #(
+    .WIDTH                          (3),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P5_Ctrl (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i),
+    .D_i                            ({P4WgtValid,P4DataValid,P4DataDone}),
+    .Q_o                            ({P5WgtValid,P5DataValid,P5DataDone})
+);
+
+// Adder Stage4                                            
+
+wire    [ADD_STAGE4_DATA_WIDTH-1:0]     AddOut4;
+genvar b;
+generate
+    for(b = 0;b < ADDER4_CYCLE_NUM;b = b + 1) begin : AddStg4                       // 2
+        Adder #(
+            .WIDTH                  (ADD_DATA_WIDTH)
+        )   AdderS4 (
+            .D0_i                   (P5Val[ADD_DATA_WIDTH*(2*b+1)-1:ADD_DATA_WIDTH*(2*b)]),
+            .D1_i                   (P5Val[ADD_DATA_WIDTH*(2*b+2)-1:ADD_DATA_WIDTH*(2*b+1)]),
+            .Q_o                    (AddOut4[ADD_DATA_WIDTH*(b+1)-1:ADD_DATA_WIDTH*b])
+        );
+    end
+endgenerate
+
+//  pipline6
+wire    [ADD_STAGE4_DATA_WIDTH-1:0]     P6Val;
+wire                P6WgtValid,P6DataValid,P6DataDone;
+
+FullConnectDFF #(
+    .WIDTH                          (ADD_STAGE4_DATA_WIDTH),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P6_Data (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i & P5DataValid),
+    .D_i                            (AddOut4),
+    .Q_o                            (P6Val)
+);
+
+FullConnectDFF #(
+    .WIDTH                          (3),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P6_Ctrl (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i),
+    .D_i                            ({P5WgtValid,P5DataValid,P5DataDone}),
+    .Q_o                            ({P6WgtValid,P6DataValid,P6DataDone})
+);
+
+// Adder Stage5                                            
+
+wire    [ADD_STAGE5_DATA_WIDTH-1:0]     AddOut5;
+genvar c;
+generate
+    for(c = 0;c < ADDER5_CYCLE_NUM;c = c + 1) begin : AddStg5                       // 1
+        Adder #(
+            .WIDTH                  (ADD_DATA_WIDTH)
+        )   AdderS5 (
+            .D0_i                   (P6Val[ADD_DATA_WIDTH*(2*c+1)-1:ADD_DATA_WIDTH*(2*c)]),
+            .D1_i                   (P6Val[ADD_DATA_WIDTH*(2*c+2)-1:ADD_DATA_WIDTH*(2*c+1)]),
+            .Q_o                    (AddOut5[ADD_DATA_WIDTH*(c+1)-1:ADD_DATA_WIDTH*c])
+        );
+    end
+endgenerate
+
+//  pipline7
+wire    [ADD_STAGE5_DATA_WIDTH-1:0]     P7Val;
+wire                P7WgtValid,P7DataValid,P7DataDone;
+
+FullConnectDFF #(
+    .WIDTH                          (ADD_STAGE5_DATA_WIDTH),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P7_Data (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i & P6DataValid),
+    .D_i                            (AddOut5),
+    .Q_o                            (P7Val)
+);
+
+FullConnectDFF #(
+    .WIDTH                          (3),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P7_Ctrl (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i),
+    .D_i                            ({P6WgtValid,P6DataValid,P6DataDone}),
+    .Q_o                            ({P7WgtValid,P7DataValid,P7DataDone})
+);
+
+
+//  Adder Stage6
+wire    [ADD_STAGE6_DATA_WIDTH-1:0]     AddOut6;
+//  pipline8
+wire    [ADD_STAGE6_DATA_WIDTH-1:0]     P8Val;
+wire               P8WgtValid,P8DataValid,P8DataDone;
+Adder #(
+    .WIDTH                  (ADD_DATA_WIDTH)
+)   AdderS6 (
+    .D0_i                   (P7Val),
+    .D1_i                   (P8Val),
+    .Q_o                    (AddOut6)
+);
+
+
+FullConnectDFF #(
+    .WIDTH                          (ADD_STAGE6_DATA_WIDTH),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P8_Data (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (Start_i),
+    .Enable_i                       (~Halt_i & P7DataValid),
+    .D_i                            (AddOut6),
+    .Q_o                            (P8Val)
+);
+
+FullConnectDFF #(
+    .WIDTH                          (3),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P8_Ctrl (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i),
+    .D_i                            ({P7WgtValid,P7DataValid,P7DataDone}),
+    .Q_o                            ({P8WgtValid,P8DataValid,P8DataDone})
+);
+
+//  Adder Stage7
+wire    [ADD_STAGE7_DATA_WIDTH-1:0]     AddOut7;
+wire [ADD_STAGE7_DATA_WIDTH-1:0] Pre_MulAc;
+
+Adder #(
+    .WIDTH                  (ADD_DATA_WIDTH)
+)   AdderS7 (
+    .D0_i                   (P8Val),
+    .D1_i                   ({ADD_STAGE7_DATA_WIDTH{Accu_i}} & Pre_MulAc),
+    .Q_o                    (AddOut7)
+);
+
+//  pipline9
+wire    [ADD_STAGE7_DATA_WIDTH-1:0]     P9Val;
+wire               P9WgtValid,P9DataValid,P9DataDone;
+
+
+FullConnectDFF #(
+    .WIDTH                          (ADD_STAGE7_DATA_WIDTH),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P9_Data (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i & P8DataDone),
+    .D_i                            (AddOut7),
+    .Q_o                            (P9Val)
+);
+FullConnectDFF #(
+    .WIDTH                          (3),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P9_Ctrl (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i),
+    .D_i                            ({P8WgtValid,P8DataValid,P8DataDone}),
+    .Q_o                            ({P9WgtValid,P9DataValid,P9DataDone})
+);
+
+FullConnectDFF #(
+    .WIDTH          (ADD_STAGE6_DATA_WIDTH),
+    .RstVal         (1'b0),
+    .PstVal         (1'b0)
+)   Pre_MulAcReg (
+    .clk            (clk),
+    .rstn           (rstn),
+    .Set_i          (1'b0),
+    .Enable_i       (P8DataDone),
+    .D_i            (P8Val),
+    .Q_o            (Pre_MulAc)
+);
+
+// Align Stage                                             
+
+wire    [15:0]  P9Val_align;
+wire    [4:0]   TempBp;
+assign  TempBp  =   DataBp_i + WeightBp_i;
+Align #(
+    .OPWIDTH                        (ADD_STAGE7_DATA_WIDTH)
+)   Align1 (
+    .D_i                            (P9Val),
+    .OpBp_i                         (TempBp),
+    .RsBp_i                         (ResultBp_i),
+    .Q_o                            (P9Val_align)
+);
+
+//  pipline10
+wire    [15:0]      P10Val;
+wire                P10WgtValid,P10DataValid,P10DataDone;
+FullConnectDFF #(
+    .WIDTH                          (16),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P10_Data (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i & P9DataDone),
+    .D_i                            (P9Val_align),
+    .Q_o                            (P10Val)
+);
+
+FullConnectDFF #(
+    .WIDTH                          (3),
+    .PstVal                         (1'b0),
+    .RstVal                         (1'b0)
+)   P10_Ctrl (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .Set_i                          (1'b0),
+    .Enable_i                       (~Halt_i),
+    .D_i                            ({P9WgtValid,P9DataValid,P9DataDone}),
+    .Q_o                            ({P10WgtValid,P10DataValid,P10DataDone})
+);
+
+/* ---------------------------------------------------------------------------------------------------- */
+/*                                      Output                                                          */
+/* ---------------------------------------------------------------------------------------------------- */
+assign MulAc_o = P10Val;
+assign Result_valid_o = P10DataDone;
+
+
+
+
+
+
+
+endmodule

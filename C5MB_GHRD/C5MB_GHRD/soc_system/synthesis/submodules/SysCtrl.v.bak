@@ -1,0 +1,235 @@
+module  SysCtrl (
+    input   wire                    clk,
+    input   wire                    rstn,
+
+    input   wire    [3:0]           AvalonAddr_i,
+    input   wire                    AvalonRead_i,
+    input   wire                    AvalonWrite_i,
+    input   wire    [31:0]          AvalonWriteData_i,
+    output  wire    [31:0]          AvalonReadData_o,
+
+    //  Convolution Config
+    output  wire                    ConvShare_o,
+    output  wire    [2:0]           ConvSize_o,
+    output  wire    [3:0]           ConvDataBp_o,
+    output  wire    [3:0]           ConvWeightBp_o,
+    output  wire    [3:0]           ConvResultBp_o,
+    output  wire    [8:0]           ConvHeight_o,
+    output  wire    [3:0]           ConvCoreEnable_o,
+    output  wire                    ConvAccuEn_o,
+    output  wire                    ConvReq_o,
+    input   wire                    ConvAck_i,
+
+    //  BiasReLU Config
+    output  wire    [15:0]          BiasReLUBias_o,
+    output  wire    [8:0]           BiasReLUHeight_o,
+    output  wire    [3:0]           BiasReLUDataBp_o,
+    output  wire    [3:0]           BiasReLUWeightBp_o,
+    output  wire    [3:0]           BiasReLUResultBp_o,
+    output  wire                    BiasReLUReLUMod_o,
+	output  wire                    BiasReLUBiasEn_o,
+    output  wire                    BiasReLUReLUEn_o,
+    output  wire                    BiasReLUReq_o,
+    input   wire                    BiasReLUAck_i,
+    output  wire    [2:0]           BiasReLUAddrSel_o,
+
+    //  Pool Config
+    output  wire    [3:0]           PoolDataBp_o,
+    output  wire    [3:0]           PoolWeightBp_o,
+    output  wire    [3:0]           PoolResultBp_o,
+    output  wire    [8:0]           PoolHeight_o,
+    output  wire                    PoolMod_o,
+    output  wire                    PoolReq_o,
+    input   wire                    PoolAck_i,
+    output  wire    [2:0]           PoolAddrSel_o,
+
+    //  FullConnect Config
+    output  wire                    FullAccu_o,
+    output  wire    [3:0]           FullDataBp_o,
+    output  wire    [3:0]           FullWeightBp_o,
+    output  wire    [3:0]           FullResultBp_o,
+    output  wire    [8:0]           FullHeight_o,
+    output  wire                    FullReq_o,
+    input   wire                    FullAck_i,
+    output  wire    [2:0]           FullAddrSel_o
+);
+
+//--------------------------------------------------------------------
+// Programmer's model 
+// Offset
+// 0x00 RW    ConvState
+// 0x04 RW    BiasReLUState
+// 0x08 RW    PoolState
+// 0x0C RW    FullConncectState
+// 0x10 RW    ConvConfig[31:0]
+//              [3:0]   ConvDataBp
+//              [7:4]   ConvWeightBp
+//              [11:8]  ConvResultBp
+//              [15:12] ConvCoreEnable
+//              [24:16] ConvHeight
+//              [27:25] ConvSize
+//              [28]    ConvShare
+//              [29]    ConvAccuEn    
+// 0x14 RW    BiasVal[15:0]
+// 0x18 RW    BiasReLUConfig[31:0]
+//              [3:0]   BiasReLUDataBp
+//              [7:4]   BiasReLUWeightBp
+//              [11:8]  BiasReLUResultBp
+//              [15:12] {reserve,BiasReLUReLUMod,BiasReLUBiasEn,BiasReLUReLUEn}
+//              [24:16] BiasReLUHeight
+//              [30:28] BiasReLUAddrSel
+// 0x1C RW    PoolConfig[31:0]
+//              [3:0]   PoolDataBp
+//              [7:4]   PoolWeightBp
+//              [11:8]  PoolResultBp
+//              [12]    PoolMod
+//              [24:16] PoolHeight    
+//              [30:28] PoolAddrSel         
+// 0x20 RW    FullConnectConfig[31:0]
+//              [3:0]   FullDataBp
+//              [7:4]   FullWeightBp
+//              [11:8]  FullResultBp
+//              [12]    FullAccu
+//              [24:16] FullHeight  
+//              [30:28] FullAddrSel  
+//----------------------------------------------------------------------
+
+//-------------------------------------------------
+//  Config Register
+//-------------------------------------------------
+
+reg     [31:0]  ConvConfig;
+reg     [31:0]  BiasVal;
+reg     [31:0]  BiasReLUConfig;
+reg     [31:0]  PoolConfig;
+reg     [31:0]  FullConfig;
+
+wire            ConvCfgSel;
+wire            BiasValSel;
+wire            BiasReLUCfgSel;
+wire            PoolCfgSel;
+wire            FullCfgSel;
+
+assign  ConvCfgSel      =   AvalonAddr_i[3:0]   ==  4'h4;
+assign  BiasValSel      =   AvalonAddr_i[3:0]   ==  4'h5;
+assign  BiasReLUCfgSel  =   AvalonAddr_i[3:0]   ==  4'h6;
+assign  PoolCfgSel      =   AvalonAddr_i[3:0]   ==  4'h7;
+assign  FullCfgSel      =   AvalonAddr_i[3:0]   ==  4'h8;
+
+always@(posedge clk or negedge rstn) begin
+    if(~rstn) begin
+        ConvConfig          <=  32'b0;
+        BiasVal             <=  32'b0;
+        BiasReLUConfig      <=  32'b0;
+        PoolConfig          <=  32'b0;
+        FullConfig   <=  32'b0;
+    end else begin
+        if(ConvCfgSel       &   AvalonWrite_i)  
+            ConvConfig      <=  AvalonWriteData_i;
+        if(BiasValSel       &   AvalonWrite_i)  
+            BiasVal         <=  AvalonWriteData_i;
+        if(BiasReLUCfgSel   &   AvalonWrite_i)  
+            BiasReLUConfig  <=  AvalonWriteData_i;
+        if(PoolCfgSel       &   AvalonWrite_i)  
+            PoolConfig      <=  AvalonWriteData_i;
+        if(FullCfgSel       &   AvalonWrite_i)  
+            FullConfig      <=  AvalonWriteData_i;
+    end
+end
+
+wire    ConvStateSel;
+wire    BiasReLUStateSel;
+wire    PoolStateSel;
+wire    FullStateSel;
+
+assign  ConvStateSel        =   AvalonAddr_i[3:0]   ==  4'h0;
+assign  BiasReLUStateSel    =   AvalonAddr_i[3:0]   ==  4'h1;
+assign  PoolStateSel        =   AvalonAddr_i[3:0]   ==  4'h2;
+assign  FullStateSel        =   AvalonAddr_i[3:0]   ==  4'h3;
+
+reg     ConvState;
+reg     BiasReLUState;
+reg     PoolState;
+reg     FullState;
+
+always@(posedge clk or negedge rstn) begin
+    if(~rstn) begin
+        ConvState           <=  1'b0;
+        BiasReLUState       <=  1'b0;
+        PoolState           <=  1'b0;
+        FullState           <=  1'b0;
+    end else begin
+
+        if(ConvStateSel     &   AvalonWrite_i)
+            ConvState       <=  AvalonWriteData_i[0];
+        else if(ConvAck_i)
+            ConvState       <=  1'b0;
+
+        if(BiasReLUStateSel &   AvalonWrite_i)
+            BiasReLUState   <=  AvalonWriteData_i[0];
+        else if(BiasReLUAck_i)
+            BiasReLUState   <=  1'b0;
+
+        if(PoolStateSel     &   AvalonWrite_i)
+            PoolState       <=  AvalonWriteData_i[0];
+        else if(PoolAck_i)
+            PoolState       <=  1'b0;
+
+        if(FullStateSel     &   AvalonWrite_i)
+            FullState       <=  AvalonWriteData_i[0];
+        else if(FullAck_i)
+            FullState       <=  1'b0;
+    
+    end
+end
+
+assign  ConvReq_o       =   ~ConvState      &   ConvStateSel        &   AvalonWrite_i   &   AvalonWriteData_i[0];
+assign  BiasReLUReq_o   =   ~BiasReLUState  &   BiasReLUStateSel    &   AvalonWrite_i   &   AvalonWriteData_i[0];
+assign  PoolReq_o       =   ~PoolState      &   PoolStateSel        &   AvalonWrite_i   &   AvalonWriteData_i[0];
+assign  FullReq_o       =   ~FullState      &   FullStateSel        &   AvalonWrite_i   &   AvalonWriteData_i[0];
+
+assign  ConvDataBp_o        =   ConvConfig[3:0];
+assign  ConvWeightBp_o      =   ConvConfig[7:4];
+assign  ConvResultBp_o      =   ConvConfig[11:8];
+assign  ConvCoreEnable_o    =   ConvConfig[15:12];
+assign  ConvHeight_o        =   ConvConfig[24:16];
+assign  ConvSize_o          =   ConvConfig[27:25];
+assign  ConvShare_o         =   ConvConfig[28];
+assign  ConvAccuEn_o        =   ConvConfig[29];
+
+assign  BiasReLUBias_o      =   BiasVal[15:0];
+assign  BiasReLUDataBp_o    =   BiasReLUConfig[3:0];
+assign  BiasReLUWeightBp_o  =   BiasReLUConfig[7:4];
+assign  BiasReLUResultBp_o  =   BiasReLUConfig[11:8];
+assign  BiasReLUReLUEn_o    =   BiasReLUConfig[12];
+assign  BiasReLUBiasEn_o    =   BiasReLUConfig[13];
+assign  BiasReLUReLUMod_o   =   BiasReLUConfig[14];
+assign  BiasReLUHeight_o    =   BiasReLUConfig[24:16];
+assign  BiasReLUAddrSel_o   =   BiasReLUConfig[30:28];
+
+assign  PoolDataBp_o        =   PoolConfig[3:0];
+assign  PoolWeightBp_o      =   PoolConfig[7:4];
+assign  PoolResultBp_o      =   PoolConfig[11:8];
+assign  PoolMod_o           =   PoolConfig[12];
+assign  PoolHeight_o        =   PoolConfig[24:16];
+assign  PoolAddrSel_o       =   PoolConfig[30:28];
+
+assign  FullDataBp_o        =   FullConfig[3:0];
+assign  FullWeightBp_o      =   FullConfig[7:4];
+assign  FullResultBp_o      =   FullConfig[11:8];
+assign  FullAccu_o          =   FullConfig[12];
+assign  FullHeight_o        =   FullConfig[24:16];
+assign  FullAddrSel_o       =   FullConfig[30:28];
+
+assign  AvalonReadData_o    =   {32{AvalonRead_i}}                                  &   
+                                ({32{ConvStateSel}}     &   {31'b0,ConvState})      |
+                                ({32{BiasReLUStateSel}} &   {31'b0,BiasReLUState})  |
+                                ({32{PoolStateSel}}     &   {31'b0,PoolState})      |
+                                ({32{FullStateSel}}     &   {31'b0,FullState})      |
+                                ({32{ConvCfgSel}}       &   ConvConfig)             |
+                                ({32{BiasValSel}}       &   BiasVal)                |
+                                ({32{BiasReLUCfgSel}}   &   BiasReLUConfig)         |
+                                ({32{PoolCfgSel}}       &   PoolConfig)             |
+                                ({32{FullCfgSel}}       &   FullConfig)             ;
+
+endmodule

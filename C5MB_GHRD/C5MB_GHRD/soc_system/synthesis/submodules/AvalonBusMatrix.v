@@ -1,0 +1,372 @@
+module AvalonBusMatrix (
+	//	System Signals
+	input	wire				clk,
+	input	wire				rstn,
+
+	//	Master 0 Signals
+	input	wire	[63:0]		Master0Addr_i,
+	input	wire	[63:0]		Master0ByteEn_i,
+	input	wire				Master0RdEn_i,
+	input	wire				Master0WrEn_i,
+	input	wire	[511:0]	    Master0WrData_i,
+	output	wire	[511:0]	    Master0RdData_o,
+	output	wire				Master0WaitReq_o,
+
+	//	Master 1 Signals
+	input	wire	[63:0]		Master1Addr_i,
+	input	wire	[63:0]		Master1ByteEn_i,
+	input	wire				Master1RdEn_i,
+	input	wire				Master1WrEn_i,
+	input	wire	[511:0]	    Master1WrData_i,
+	output	wire	[511:0]	    Master1RdData_o,
+	output	wire				Master1WaitReq_o,
+
+	//	Master 2 Signals
+	input	wire	[63:0]		Master2Addr_i,
+	input	wire	[63:0]		Master2ByteEn_i,
+	input	wire				Master2RdEn_i,
+	input	wire				Master2WrEn_i,
+	input	wire	[511:0]	    Master2WrData_i,
+	output	wire	[511:0]	    Master2RdData_o,
+	output	wire				Master2WaitReq_o,
+
+	//	Master 3 Signals
+	input	wire	[63:0]		Master3Addr_i,
+	input	wire	[63:0]		Master3ByteEn_i,
+	input	wire				Master3RdEn_i,
+	input	wire				Master3WrEn_i,
+	input	wire	[511:0]	    Master3WrData_i,
+	output	wire	[511:0]	    Master3RdData_o,
+	output	wire				Master3WaitReq_o,
+
+	//	Master 4 Signals
+	input	wire	[63:0]		Master4Addr_i,
+	input	wire	[63:0]		Master4ByteEn_i,
+	input	wire				Master4RdEn_i,
+	input	wire				Master4WrEn_i,
+	input	wire	[511:0]	    Master4WrData_i,
+	output	wire	[511:0]	    Master4RdData_o,
+	output	wire				Master4WaitReq_o,
+
+	//	Slave 0 Signals
+	output	wire	[63:0]		Slave0Addr_o,
+	output	wire	[63:0]		Slave0ByteEn_o,
+	output	wire				Slave0RdEn_o,
+	output	wire				Slave0WrEn_o,
+	output	wire	[511:0]	    Slave0WrData_o,
+	input	wire	[511:0]	    Slave0RdData_i,
+	input	wire				Slave0WaitReq_i,
+
+	//	Slave 1 Signals
+	output	wire	[63:0]		Slave1Addr_o,
+	output	wire	[63:0]		Slave1ByteEn_o,
+	output	wire				Slave1RdEn_o,
+	output	wire				Slave1WrEn_o,
+	output	wire	[511:0]	    Slave1WrData_o,
+	input	wire	[511:0]	    Slave1RdData_i,
+	input	wire				Slave1WaitReq_i,
+
+	//	Slave 2 Signals
+	output	wire	[63:0]		Slave2Addr_o,
+	output	wire	[63:0]		Slave2ByteEn_o,
+	output	wire				Slave2RdEn_o,
+	output	wire				Slave2WrEn_o,
+	output	wire	[511:0]	    Slave2WrData_o,
+	input	wire	[511:0]	    Slave2RdData_i,
+	input	wire				Slave2WaitReq_i
+);
+
+wire	Master0Req0, Master0Req1, Master0Req2;
+wire	Master1Req0, Master1Req1, Master1Req2;
+wire	Master2Req0, Master2Req1, Master2Req2;
+wire	Master3Req0, Master3Req1, Master3Req2;
+wire	Master4Req0, Master4Req1, Master4Req2;
+
+wire	[2:0]	Slave0PortSel;
+wire	[2:0]	Slave1PortSel;
+wire	[2:0]	Slave2PortSel;
+
+//	Decoder	0
+AvalonBusMatrixDecoder #(
+	.Port0En				(1),
+	.Port1En				(1),
+	.Port2En				(1),
+	.MstID					(3'h0)
+)	Dec0	(
+	.clk					(clk),
+	.rstn					(rstn),
+	.Addr_i					(Master0Addr_i),
+	.RdEn_i					(Master0RdEn_i),
+	.WrEn_i					(Master0WrEn_i),
+	.RdData0_i				(Slave0RdData_i),
+	.WaitReq0_i				(Slave0WaitReq_i),
+	.PortSel0_i				(Slave0PortSel),
+	.RdData1_i				(Slave1RdData_i),
+	.WaitReq1_i				(Slave1WaitReq_i),
+	.PortSel1_i				(Slave1PortSel),
+	.RdData2_i				(Slave2RdData_i),
+	.WaitReq2_i				(Slave2WaitReq_i),
+	.PortSel2_i				(Slave2PortSel),
+	.Req0_o					(Master0Req0),
+	.Req1_o					(Master0Req1),
+	.Req2_o					(Master0Req2),
+	.RdDataDec_o			(Master0RdData_o),
+	.WaitReq_o				(Master0WaitReq_o)
+);
+
+//	Decoder	1
+AvalonBusMatrixDecoder #(
+	.Port0En				(0),
+	.Port1En				(0),
+	.Port2En				(1),
+	.MstID					(3'h1)
+)	Dec1	(
+	.clk					(clk),
+	.rstn					(rstn),
+	.Addr_i					(Master1Addr_i),
+	.RdEn_i					(Master1RdEn_i),
+	.WrEn_i					(Master1WrEn_i),
+	.RdData0_i				(Slave0RdData_i),
+	.WaitReq0_i				(Slave0WaitReq_i),
+	.PortSel0_i				(Slave0PortSel),
+	.RdData1_i				(Slave1RdData_i),
+	.WaitReq1_i				(Slave1WaitReq_i),
+	.PortSel1_i				(Slave1PortSel),
+	.RdData2_i				(Slave2RdData_i),
+	.WaitReq2_i				(Slave2WaitReq_i),
+	.PortSel2_i				(Slave2PortSel),
+	.Req0_o					(Master1Req0),
+	.Req1_o					(Master1Req1),
+	.Req2_o					(Master1Req2),
+	.RdDataDec_o			(Master1RdData_o),
+	.WaitReq_o				(Master1WaitReq_o)
+);
+
+//	Decoder	2
+AvalonBusMatrixDecoder #(
+	.Port0En				(0),
+	.Port1En				(0),
+	.Port2En				(1),
+	.MstID					(3'h2)
+)	Dec2	(
+	.clk					(clk),
+	.rstn					(rstn),
+	.Addr_i					(Master2Addr_i),
+	.RdEn_i					(Master2RdEn_i),
+	.WrEn_i					(Master2WrEn_i),
+	.RdData0_i				(Slave0RdData_i),
+	.WaitReq0_i				(Slave0WaitReq_i),
+	.PortSel0_i				(Slave0PortSel),
+	.RdData1_i				(Slave1RdData_i),
+	.WaitReq1_i				(Slave1WaitReq_i),
+	.PortSel1_i				(Slave1PortSel),
+	.RdData2_i				(Slave2RdData_i),
+	.WaitReq2_i				(Slave2WaitReq_i),
+	.PortSel2_i				(Slave2PortSel),
+	.Req0_o					(Master2Req0),
+	.Req1_o					(Master2Req1),
+	.Req2_o					(Master2Req2),
+	.RdDataDec_o			(Master2RdData_o),
+	.WaitReq_o				(Master2WaitReq_o)
+);
+
+//	Decoder	3
+AvalonBusMatrixDecoder #(
+	.Port0En				(1),
+	.Port1En				(1),
+	.Port2En				(1),
+	.MstID					(3'h3)
+)	Dec3	(
+	.clk					(clk),
+	.rstn					(rstn),
+	.Addr_i					(Master3Addr_i),
+	.RdEn_i					(Master3RdEn_i),
+	.WrEn_i					(Master3WrEn_i),
+	.RdData0_i				(Slave0RdData_i),
+	.WaitReq0_i				(Slave0WaitReq_i),
+	.PortSel0_i				(Slave0PortSel),
+	.RdData1_i				(Slave1RdData_i),
+	.WaitReq1_i				(Slave1WaitReq_i),
+	.PortSel1_i				(Slave1PortSel),
+	.RdData2_i				(Slave2RdData_i),
+	.WaitReq2_i				(Slave2WaitReq_i),
+	.PortSel2_i				(Slave2PortSel),
+	.Req0_o					(Master3Req0),
+	.Req1_o					(Master3Req1),
+	.Req2_o					(Master3Req2),
+	.RdDataDec_o			(Master3RdData_o),
+	.WaitReq_o				(Master3WaitReq_o)
+);
+
+//	Decoder	4//用于解码哪个master访问
+AvalonBusMatrixDecoder #(
+	.Port0En				(1),
+	.Port1En				(1),
+	.Port2En				(1),
+	.MstID					(3'h4)
+)	Dec4	(
+	.clk					(clk),
+	.rstn					(rstn),
+	.Addr_i					(Master4Addr_i),
+	.RdEn_i					(Master4RdEn_i),
+	.WrEn_i					(Master4WrEn_i),
+	.RdData0_i				(Slave0RdData_i),
+	.WaitReq0_i				(Slave0WaitReq_i),
+	.PortSel0_i				(Slave0PortSel),
+	.RdData1_i				(Slave1RdData_i),
+	.WaitReq1_i				(Slave1WaitReq_i),
+	.PortSel1_i				(Slave1PortSel),
+	.RdData2_i				(Slave2RdData_i),
+	.WaitReq2_i				(Slave2WaitReq_i),
+	.PortSel2_i				(Slave2PortSel),
+	.Req0_o					(Master4Req0),
+	.Req1_o					(Master4Req1),
+	.Req2_o					(Master4Req2),
+	.RdDataDec_o			(Master4RdData_o),
+	.WaitReq_o				(Master4WaitReq_o)
+);
+
+//	Arbiter	0//用于仲裁同时访问的情况
+AvalonBusMatrixArbiter	Arbiter0(
+	.clk					(clk),
+	.rstn					(rstn),
+	.Req0_i					(Master0Req0),
+	.Req1_i					(Master1Req0),
+	.Req2_i					(Master2Req0),
+	.Req3_i					(Master3Req0),
+	.Req4_i					(Master4Req0),
+	.PortSel_o				(Slave0PortSel),
+	.PortNoSel_o			(Slave0PortNoSel)
+);
+
+//	Arbiter	1
+AvalonBusMatrixArbiter	Arbiter1(
+	.clk					(clk),
+	.rstn					(rstn),
+	.Req0_i					(Master0Req1),
+	.Req1_i					(Master1Req1),
+	.Req2_i					(Master2Req1),
+	.Req3_i					(Master3Req1),
+	.Req4_i					(Master4Req1),
+	.PortSel_o				(Slave1PortSel),
+	.PortNoSel_o			(Slave1PortNoSel)
+);
+
+//	Arbiter	2
+AvalonBusMatrixArbiter	Arbiter2(
+	.clk					(clk),
+	.rstn					(rstn),
+	.Req0_i					(Master0Req2),
+	.Req1_i					(Master1Req2),
+	.Req2_i					(Master2Req2),
+	.Req3_i					(Master3Req2),
+	.Req4_i					(Master4Req2),
+	.PortSel_o				(Slave2PortSel),
+	.PortNoSel_o			(Slave2PortNoSel)
+);
+assign	Slave0Addr_o	=	({64{~Slave0PortNoSel}})	&	(
+							({64{Slave0PortSel	==	3'h0}}	&	Master0Addr_i)	|
+							({64{Slave0PortSel	==	3'h1}}	&	Master1Addr_i)	|
+							({64{Slave0PortSel	==	3'h2}}	&	Master2Addr_i)	|
+							({64{Slave0PortSel	==	3'h3}}	&	Master3Addr_i)	|
+							({64{Slave0PortSel	==	3'h4}}	&	Master4Addr_i)	);
+
+assign	Slave1Addr_o	=	({64{~Slave1PortNoSel}})	&	(
+							({64{Slave1PortSel	==	3'h0}}	&	Master0Addr_i)	|
+							({64{Slave1PortSel	==	3'h1}}	&	Master1Addr_i)	|
+							({64{Slave1PortSel	==	3'h2}}	&	Master2Addr_i)	|
+							({64{Slave1PortSel	==	3'h3}}	&	Master3Addr_i)	|
+							({64{Slave1PortSel	==	3'h4}}	&	Master4Addr_i)	);
+
+assign	Slave2Addr_o	=	({64{~Slave2PortNoSel}})	&	(
+							({64{Slave2PortSel	==	3'h0}}	&	Master0Addr_i)	|
+							({64{Slave2PortSel	==	3'h1}}	&	Master1Addr_i)	|
+							({64{Slave2PortSel	==	3'h2}}	&	Master2Addr_i)	|
+							({64{Slave2PortSel	==	3'h3}}	&	Master3Addr_i)	|
+							({64{Slave2PortSel	==	3'h4}}	&	Master4Addr_i)	);
+
+assign	Slave0ByteEn_o	=	({64{~Slave0PortNoSel}})	&	(
+							({64{Slave0PortSel	==	3'h0}}	&	Master0ByteEn_i)	|
+							({64{Slave0PortSel	==	3'h1}}	&	Master1ByteEn_i)	|
+							({64{Slave0PortSel	==	3'h2}}	&	Master2ByteEn_i)	|
+							({64{Slave0PortSel	==	3'h3}}	&	Master3ByteEn_i)	|
+							({64{Slave0PortSel	==	3'h4}}	&	Master4ByteEn_i)	);
+
+assign	Slave1ByteEn_o	=	({64{~Slave1PortNoSel}})	&	(
+							({64{Slave1PortSel	==	3'h0}}	&	Master0ByteEn_i)	|
+							({64{Slave1PortSel	==	3'h1}}	&	Master1ByteEn_i)	|
+							({64{Slave1PortSel	==	3'h2}}	&	Master2ByteEn_i)	|
+							({64{Slave1PortSel	==	3'h3}}	&	Master3ByteEn_i)	|
+							({64{Slave1PortSel	==	3'h4}}	&	Master4ByteEn_i)	);
+
+assign	Slave2ByteEn_o	=	({64{~Slave2PortNoSel}})	&	(
+							({64{Slave2PortSel	==	3'h0}}	&	Master0ByteEn_i)	|
+							({64{Slave2PortSel	==	3'h1}}	&	Master1ByteEn_i)	|
+							({64{Slave2PortSel	==	3'h2}}	&	Master2ByteEn_i)	|
+							({64{Slave2PortSel	==	3'h3}}	&	Master3ByteEn_i)	|
+							({64{Slave2PortSel	==	3'h4}}	&	Master4ByteEn_i)	);
+
+assign	Slave0RdEn_o	=	((~Slave0PortNoSel))	&	(
+							((Slave0PortSel	==	3'h0)	&	Master0RdEn_i)	|
+							((Slave0PortSel	==	3'h1)	&	Master1RdEn_i)	|
+							((Slave0PortSel	==	3'h2)	&	Master2RdEn_i)	|
+							((Slave0PortSel	==	3'h3)	&	Master3RdEn_i)	|
+							((Slave0PortSel	==	3'h4)	&	Master4RdEn_i)	);
+
+assign	Slave1RdEn_o	=	((~Slave1PortNoSel))	&	(
+							((Slave1PortSel	==	3'h0)	&	Master0RdEn_i)	|
+							((Slave1PortSel	==	3'h1)	&	Master1RdEn_i)	|
+							((Slave1PortSel	==	3'h2)	&	Master2RdEn_i)	|
+							((Slave1PortSel	==	3'h3)	&	Master3RdEn_i)	|
+							((Slave1PortSel	==	3'h4)	&	Master4RdEn_i)	);
+
+assign	Slave2RdEn_o	=	((~Slave2PortNoSel))	&	(
+							((Slave2PortSel	==	3'h0)	&	Master0RdEn_i)	|
+							((Slave2PortSel	==	3'h1)	&	Master1RdEn_i)	|
+							((Slave2PortSel	==	3'h2)	&	Master2RdEn_i)	|
+							((Slave2PortSel	==	3'h3)	&	Master3RdEn_i)	|
+							((Slave2PortSel	==	3'h4)	&	Master4RdEn_i)	);
+
+assign	Slave0WrEn_o	=	((~Slave0PortNoSel))	&	(
+							((Slave0PortSel	==	3'h0)	&	Master0WrEn_i)	|
+							((Slave0PortSel	==	3'h1)	&	Master1WrEn_i)	|
+							((Slave0PortSel	==	3'h2)	&	Master2WrEn_i)	|
+							((Slave0PortSel	==	3'h3)	&	Master3WrEn_i)	|
+							((Slave0PortSel	==	3'h4)	&	Master4WrEn_i)	);
+
+assign	Slave1WrEn_o	=	((~Slave1PortNoSel))	&	(
+							((Slave1PortSel	==	3'h0)	&	Master0WrEn_i)	|
+							((Slave1PortSel	==	3'h1)	&	Master1WrEn_i)	|
+							((Slave1PortSel	==	3'h2)	&	Master2WrEn_i)	|
+							((Slave1PortSel	==	3'h3)	&	Master3WrEn_i)	|
+							((Slave1PortSel	==	3'h4)	&	Master4WrEn_i)	);
+
+assign	Slave2WrEn_o	=	((~Slave2PortNoSel))	&	(
+							((Slave2PortSel	==	3'h0)	&	Master0WrEn_i)	|
+							((Slave2PortSel	==	3'h1)	&	Master1WrEn_i)	|
+							((Slave2PortSel	==	3'h2)	&	Master2WrEn_i)	|
+							((Slave2PortSel	==	3'h3)	&	Master3WrEn_i)	|
+							((Slave2PortSel	==	3'h4)	&	Master4WrEn_i)	);
+
+assign	Slave0WrData_o	=	({512{~Slave0PortNoSel}})	&	(
+							({512{Slave0PortSel	==	3'h0}}	&	Master0WrData_i)	|
+							({512{Slave0PortSel	==	3'h1}}	&	Master1WrData_i)	|
+							({512{Slave0PortSel	==	3'h2}}	&	Master2WrData_i)	|
+							({512{Slave0PortSel	==	3'h3}}	&	Master3WrData_i)	|
+							({512{Slave0PortSel	==	3'h4}}	&	Master4WrData_i)	);
+
+assign	Slave1WrData_o	=	({512{~Slave1PortNoSel}})	&	(
+							({512{Slave1PortSel	==	3'h0}}	&	Master0WrData_i)	|
+							({512{Slave1PortSel	==	3'h1}}	&	Master1WrData_i)	|
+							({512{Slave1PortSel	==	3'h2}}	&	Master2WrData_i)	|
+							({512{Slave1PortSel	==	3'h3}}	&	Master3WrData_i)	|
+							({512{Slave1PortSel	==	3'h4}}	&	Master4WrData_i)	);
+
+assign	Slave2WrData_o	=	({512{~Slave2PortNoSel}})	&	(
+							({512{Slave2PortSel	==	3'h0}}	&	Master0WrData_i)	|
+							({512{Slave2PortSel	==	3'h1}}	&	Master1WrData_i)	|
+							({512{Slave2PortSel	==	3'h2}}	&	Master2WrData_i)	|
+							({512{Slave2PortSel	==	3'h3}}	&	Master3WrData_i)	|
+							({512{Slave2PortSel	==	3'h4}}	&	Master4WrData_i)	);
+
+endmodule

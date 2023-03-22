@@ -1,0 +1,245 @@
+
+module	BiasReLU_top #(
+    parameter       BUSWIDTH            =  512 ,
+    parameter       BYTEENABLEWIDTH      =  64  ,       //BUSWIDTH/8
+    
+    parameter                       ShareMemAddr    =   64'h0,
+    parameter                       PrivateMemAddr0 =   64'h0,
+    parameter                       PrivateMemAddr1 =   64'h0,
+    parameter                       PrivateMemAddr2 =   64'h0,
+    parameter                       PrivateMemAddr3 =   64'h0     
+
+
+)	(
+	//Clock&Reset
+    input   wire                                clk,
+    input   wire                                rstn,
+	 
+	 input   wire [2:0]             					 addr_sel,
+        
+    input   wire  [31:0]                        Bias_i,
+    input   wire  [8:0]                         Height_i,
+    input   wire  [3:0]                         Data_Bp_i,
+    input   wire  [3:0]                         Weight_Bp_i,
+    input   wire  [3:0]                         Result_Bp_i,
+
+    
+	input   wire                                ReLUMod_i,
+	input   wire                                BiasEn_i,
+    input   wire                                ReLUEn_i,
+	 
+	 //  HandShake With BusInterface
+    input   wire                                Req_i,
+    output  wire                                Ack_o,
+
+     //  Avalon-MM Master
+    output  wire    [63:0]                      AvalonAddr_o,
+    output  wire                                AvalonRead_o,
+    output  wire                                AvalonWrite_o,
+    output  wire    [BYTEENABLEWIDTH-1:0]       AvalonByteEnable_o,
+    output  wire    [BUSWIDTH-1:0]             AvalonWriteData_o,
+    input   wire    [BUSWIDTH-1:0]             AvalonReadData_i,
+    output  wire                                AvalonLock_o,
+    input   wire                                AvalonWaitReq_i
+
+
+);
+
+
+wire     Rd_Start    ;
+wire     BR_Start    ;
+wire     Wr_Start    ;
+        
+wire     Read_Done  ;
+wire     BR_Done    ;
+wire     Write_Done ;
+wire     pos_req    ;
+
+
+reg[63:0] DataMemAddr;
+wire[63:0] WriteBackMemAddr;
+always @(*)
+begin
+    case (addr_sel)
+       3'b000   : DataMemAddr <= ShareMemAddr;
+       3'b001   : DataMemAddr <= PrivateMemAddr0;
+       3'b010   : DataMemAddr <= PrivateMemAddr1;
+       3'b011   : DataMemAddr <= PrivateMemAddr2;
+       3'b100   : DataMemAddr <= PrivateMemAddr3;
+       default : DataMemAddr <= ShareMemAddr;
+    endcase
+end         
+assign WriteBackMemAddr = DataMemAddr;         
+
+
+
+BRContrl    BRContrl_inst  (
+            .clk                        (clk),
+            .rstn                       (rstn),
+
+            .Height_i                   (Height_i)  ,   
+
+            .Req_i                      (Req_i)     ,
+
+            .Rd_Start_o                 (Rd_Start)  ,
+            .BR_Start_o                 (BR_Start)  ,
+            .Wr_Start_o                 (Wr_Start)  ,
+
+            .pos_req_o                  (pos_req)   ,
+            .Read_Done_i                (Read_Done) ,
+            .BR_Done_i                  (BR_Done)   ,
+            .Write_Done_i               (Write_Done) ,
+
+            .Ack_o                      (Ack_o)  
+
+);
+
+
+wire    [63:0]                          RdMstAddr;
+wire                                    RdMstRead;
+wire                                    RdMstWrite;
+wire    [BYTEENABLEWIDTH-1:0]           RdMstByteEnable;
+wire    [BUSWIDTH-1:0]                 RdMstWriteData;
+wire    [BUSWIDTH-1:0]                 RdMstReadData;
+wire                                    RdMstLock;
+wire                                    RdMstWaitReq;
+
+wire                                    data_en;
+wire    [BUSWIDTH-1:0]                 data;
+
+
+
+BRReadMaster  #(
+    .BUSWIDTH           ( BUSWIDTH) ,
+    .BYTEENABLEWIDTH     ( BYTEENABLEWIDTH)       
+    
+         
+)   RdMst(
+    .clk                        (clk),
+    .rstn                       (rstn),
+
+    .WriteBackMemAddr             (WriteBackMemAddr),
+    //TOP
+    .Start_i                    (Rd_Start),
+    .pos_req_i                  (pos_req),
+   
+    .AvalonAddr_o               (RdMstAddr),
+    .AvalonRead_o               (RdMstRead),
+    .AvalonWrite_o              (RdMstWrite),
+    .AvalonByteEnable_o         (RdMstByteEnable),
+    .AvalonWriteData_o          (RdMstWriteData),
+    .AvalonReadData_i           (RdMstReadData),
+    .AvalonLock_o               (RdMstLock),
+    .AvalonWaitReq_i            (RdMstWaitReq),
+
+    .WBEnable_o                 (data_en),
+    .WBLine_o                   (data),   
+
+    .WBReady_o                  (Read_Done)         //master数据读取完成信号 
+
+);
+
+wire     [BUSWIDTH-1:0]             Result;  
+
+BiasReLU  #(
+    .BUSWIDTH                  ( BUSWIDTH)
+)BiasReLU_inst(
+    .clk                        (clk),
+    .rstn                       (rstn),
+
+    .Bias_i                     (Bias_i),
+    .ReLUMod_i                  (ReLUMod_i),
+    .Data_Bp_i                  (Data_Bp_i),
+    .Weight_Bp_i                (Weight_Bp_i),
+    .Result_Bp_i                (Result_Bp_i),
+    .BiasEn_i                   (BiasEn_i),
+    .ReLUEn_i                   (ReLUEn_i),
+
+    .Data_i                     (data),
+    .Data_en_i                  (data_en),
+
+    .Result_o                   (Result),
+
+    .BR_Start_i                 (BR_Start) ,
+    .BR_Done_o                  (BR_Done)
+
+);
+
+
+
+
+wire    [63:0]                    WrMstAddr;
+wire                              WrMstRead;
+wire                              WrMstWrite;
+wire    [BYTEENABLEWIDTH-1:0]     WrMstByteEnable;
+wire    [BUSWIDTH-1:0]            WrMstWriteData;
+wire    [BUSWIDTH-1:0]            WrMstReadData;
+wire                              WrMstLock;
+wire                              WrMstWaitReq;
+
+
+BRWriteMaster  #(
+    .BUSWIDTH           ( BUSWIDTH) ,
+    .BYTEENABLEWIDTH     ( BYTEENABLEWIDTH)     
+    
+)   WrMst(
+    .clk                        (clk),
+    .rstn                       (rstn),
+
+    .WriteBackMemAddr            (WriteBackMemAddr),
+    //TOP
+    .Start_i                    (Wr_Start),
+    .pos_req_i                  (pos_req),
+   
+    .AvalonAddr_o               (WrMstAddr),
+    .AvalonRead_o               (WrMstRead),
+    .AvalonWrite_o              (WrMstWrite),
+    .AvalonByteEnable_o         (WrMstByteEnable),
+    .AvalonWriteData_o          (WrMstWriteData),
+    .AvalonReadData_i           (WrMstReadData),
+    .AvalonLock_o               (WrMstLock),
+    .AvalonWaitReq_i            (WrMstWaitReq),
+
+    .Data_i                      (Result),
+    .Write_Done_o                (Write_Done)       
+    
+);
+
+
+
+RBMaster#(
+    .BUSWIDTH           ( BUSWIDTH) ,
+    .BYTEENABLEWIDTH     ( BYTEENABLEWIDTH)  
+
+)   RBMst (
+    .clk                        (clk),
+    .rstn                       (rstn),
+    .RdMstAddr_i                (RdMstAddr),
+    .RdMstRead_i                (RdMstRead),
+    .RdMstWrite_i               (RdMstWrite),
+    .RdMstByteEnable_i          (RdMstByteEnable),
+    .RdMstWriteData_i           (RdMstWriteData),
+    .RdMstReadData_o            (RdMstReadData),
+    .RdMstLock_i                (RdMstLock),
+    .RdMstWaitReq_o             (RdMstWaitReq),
+    .WrMstAddr_i                (WrMstAddr),
+    .WrMstRead_i                (WrMstRead),
+    .WrMstWrite_i               (WrMstWrite),
+    .WrMstByteEnable_i          (WrMstByteEnable),
+    .WrMstWriteData_i           (WrMstWriteData),
+    .WrMstReadData_o            (WrMstReadData),
+    .WrMstLock_i                (WrMstLock),
+    .WrMstWaitReq_o             (WrMstWaitReq),
+    .AvalonAddr_o               (AvalonAddr_o),
+    .AvalonRead_o               (AvalonRead_o),
+    .AvalonWrite_o              (AvalonWrite_o),
+    .AvalonByteEnable_o         (AvalonByteEnable_o),
+    .AvalonWriteData_o          (AvalonWriteData_o),
+    .AvalonReadData_i           (AvalonReadData_i),
+    .AvalonLock_o               (AvalonLock_o),
+    .AvalonWaitReq_i            (AvalonWaitReq_i)
+);
+
+
+
+endmodule

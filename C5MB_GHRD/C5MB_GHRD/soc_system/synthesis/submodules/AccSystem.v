@@ -1,0 +1,460 @@
+module  AccSystem #(
+     parameter                       WeightMemAddr    =64'h0,
+     parameter                       ShareMemAddr0    =64'h200,
+	 parameter                       ShareMemAddr1    =64'h400,
+	 parameter                       PrivateMemAddr0  =64'h0,
+	 parameter                       PrivateMemAddr1  =64'h0,
+	 parameter                       PrivateMemAddr2  =64'h0,
+	 parameter                       PrivateMemAddr3  =64'h0	  
+)   (
+    input   wire                    clk,
+    input   wire                    rstn,
+
+    //  Config Slave
+    input   wire    [3:0]           ConfigAddr_i,
+    input   wire                    ConfigRead_i,
+    input   wire                    ConfigWrite_i,
+    input   wire    [31:0]          ConfigWriteData_i,
+    output  wire    [31:0]          ConfigReadData_o,
+
+    //  MASTER
+    input   wire    [14:0]          AvalonAddr_i,
+    input   wire                    AvalonRead_i,
+    input   wire                    AvalonWrite_i,
+    input   wire    [15:0]          AvalonByteEnable_i,
+    input   wire    [127:0]         AvalonWriteData_i,
+    output  wire    [127:0]         AvalonReadData_o,
+    output  wire                    AvalonWaitReq_o
+);
+
+
+//  Convolution Config
+wire                    ConvShare;
+wire    [2:0]           ConvSize;
+wire    [3:0]           ConvDataBp;
+wire    [3:0]           ConvWeightBp;
+wire    [3:0]           ConvResultBp;
+wire    [8:0]           ConvHeight;
+wire    [3:0]           ConvCoreEnable;
+wire                    ConvAccuEn;
+wire                    ConvReq;
+wire                    ConvAck;
+
+//  BiasReLU Config
+wire    [31:0]          BiasReLUBias;
+wire    [8:0]           BiasReLUHeight;
+wire    [3:0]           BiasReLUDataBp;
+wire    [3:0]           BiasReLUWeightBp;
+wire    [3:0]           BiasReLUResultBp;
+wire                    BiasReLUReLUMod;
+wire                    BiasReLUBiasEn;
+wire                    BiasReLUReLUEn;
+wire                    BiasReLUReq;
+wire                    BiasReLUAck;
+wire    [2:0]           BiasReLUAddrSel;
+
+//  Pool Config
+wire    [3:0]           PoolDataBp;
+wire    [3:0]           PoolWeightBp;
+wire    [3:0]           PoolResultBp;
+wire    [8:0]           PoolHeight;
+wire                    PoolMod;
+wire                    PoolReq;
+wire                    PoolAck;
+wire    [2:0]           PoolAddrSel;
+
+//  FullConnect Config
+wire                    FullAccu;
+wire    [3:0]           FullDataBp;
+wire    [3:0]           FullWeightBp;
+wire    [3:0]           FullResultBp;
+wire    [8:0]           FullHeight;
+wire                    FullReq;
+wire                    FullAck;
+wire    [2:0]           FullAddrSel;
+
+SysCtrl Controller (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    
+    .AvalonAddr_i                   (ConfigAddr_i),
+    .AvalonRead_i                   (ConfigRead_i),
+    .AvalonWrite_i                  (ConfigWrite_i),
+    .AvalonWriteData_i              (ConfigWriteData_i),
+    .AvalonReadData_o               (ConfigReadData_o),
+
+    .ConvShare_o                    (ConvShare),
+    .ConvSize_o                     (ConvSize),
+    .ConvDataBp_o                   (ConvDataBp),
+    .ConvWeightBp_o                 (ConvWeightBp),
+    .ConvResultBp_o                 (ConvResultBp),
+    .ConvHeight_o                   (ConvHeight),
+    .ConvCoreEnable_o               (ConvCoreEnable),
+    .ConvAccuEn_o                   (ConvAccuEn),
+    .ConvReq_o                      (ConvReq),
+    .ConvAck_i                      (ConvAck),
+
+    .BiasReLUBias_o                 (BiasReLUBias),
+    .BiasReLUHeight_o               (BiasReLUHeight),
+    .BiasReLUDataBp_o               (BiasReLUDataBp),
+    .BiasReLUWeightBp_o             (BiasReLUWeightBp),
+    .BiasReLUResultBp_o             (BiasReLUResultBp),
+    .BiasReLUReLUMod_o              (BiasReLUReLUMod),
+    .BiasReLUBiasEn_o               (BiasReLUBiasEn),
+    .BiasReLUReLUEn_o               (BiasReLUReLUEn),
+    .BiasReLUReq_o                  (BiasReLUReq),
+    .BiasReLUAck_i                  (BiasReLUAck),
+    .BiasReLUAddrSel_o              (BiasReLUAddrSel),
+
+    .PoolDataBp_o                   (PoolDataBp),
+    .PoolWeightBp_o                 (PoolWeightBp),
+    .PoolResultBp_o                 (PoolResultBp),
+    .PoolHeight_o                   (PoolHeight),
+    .PoolMod_o                      (PoolMod),
+    .PoolReq_o                      (PoolReq),
+    .PoolAck_i                      (PoolAck),
+    .PoolAddrSel_o                  (PoolAddrSel),
+
+    .FullAccu_o                     (FullAccu),
+    .FullDataBp_o                   (FullDataBp),
+    .FullWeightBp_o                 (FullWeightBp),
+    .FullResultBp_o                 (FullResultBp),
+    .FullHeight_o                   (FullHeight),
+    .FullReq_o                      (FullReq),
+    .FullAck_i                      (FullAck),
+    .FullAddrSel_o                  (FullAddrSel)
+);
+
+//  Convolution
+
+wire    [63:0]          ConvAddr;
+wire                    ConvRead;
+wire                    ConvWrite;
+wire    [63:0]         ConvByteEnable;
+wire    [511:0]        ConvWriteData;
+wire    [511:0]        ConvReadData;
+wire                    ConvLock;
+wire                    ConvWaitReq;
+
+Convolution #(
+    .WeightMemAddr                  (WeightMemAddr  ),
+    .ShareMemAddr0                   (ShareMemAddr0   ),
+	 .ShareMemAddr1                   (ShareMemAddr1   )
+)   Conv    (
+    .clk                            (clk),
+    .rstn                           (rstn),
+
+    .Share_i                        (ConvShare),
+    .ConvSize_i                     (ConvSize),
+    .DataBp_i                       (ConvDataBp),
+    .WeightBp_i                     (ConvWeightBp),
+    .ResultBp_i                     (ConvResultBp),
+    .Height_i                       (ConvHeight),
+    .CoreEnable_i                   (ConvCoreEnable),
+    .AccuEn_i                       (ConvAccuEn),
+
+    .Req_i                          (ConvReq),
+    .Ack_o                          (ConvAck),
+
+    .AvalonAddr_o                   (ConvAddr),
+    .AvalonRead_o                   (ConvRead),
+    .AvalonWrite_o                  (ConvWrite),
+    .AvalonByteEnable_o             (ConvByteEnable),
+    .AvalonWriteData_o              (ConvWriteData),
+    .AvalonReadData_i               (ConvReadData),
+    .AvalonLock_o                   (ConvLock),
+    .AvalonWaitReq_i                (ConvWaitReq)
+);
+
+wire    [63:0]          BiasReLUAddr;
+wire                    BiasReLURead;
+wire                    BiasReLUWrite;
+wire    [63:0]         BiasReLUByteEnable;
+wire    [511:0]        BiasReLUWriteData;
+wire    [511:0]        BiasReLUReadData;
+wire                    BiasReLULock;
+wire                    BiasReLUWaitReq;
+
+BiasReLU_top #(
+    .ShareMemAddr                   (ShareMemAddr1   ),
+    .PrivateMemAddr0                (PrivateMemAddr0),
+    .PrivateMemAddr1                (PrivateMemAddr1),
+    .PrivateMemAddr2                (PrivateMemAddr2),
+    .PrivateMemAddr3                (PrivateMemAddr3)
+)   BiasReLU    (
+    .clk                            (clk),
+    .rstn                           (rstn),
+
+    .addr_sel                       (BiasReLUAddrSel),
+    .Bias_i                         (BiasReLUBias),
+    .Height_i                       (BiasReLUHeight),
+    .Data_Bp_i                      (BiasReLUDataBp),
+    .Weight_Bp_i                    (BiasReLUWeightBp),
+    .Result_Bp_i                    (BiasReLUResultBp),
+    .ReLUMod_i                      (BiasReLUReLUMod),
+    .BiasEn_i                       (BiasReLUReLUEn),
+    .ReLUEn_i                       (BiasReLUReLUEn),
+    .Req_i                          (BiasReLUReq),
+    .Ack_o                          (BiasReLUAck),
+
+    .AvalonAddr_o                   (BiasReLUAddr),
+    .AvalonRead_o                   (BiasReLURead),
+    .AvalonWrite_o                  (BiasReLUWrite),
+    .AvalonByteEnable_o             (BiasReLUByteEnable),
+    .AvalonWriteData_o              (BiasReLUWriteData),
+    .AvalonReadData_i               (BiasReLUReadData),
+    .AvalonLock_o                   (BiasReLULock),
+    .AvalonWaitReq_i                (BiasReLUWaitReq)
+);
+
+wire    [63:0]          PoolAddr;
+wire                    PoolRead;
+wire                    PoolWrite;
+wire    [63:0]         PoolByteEnable;
+wire    [511:0]        PoolWriteData;
+wire    [511:0]        PoolReadData;
+wire                    PoolLock;
+wire                    PoolWaitReq;
+
+pool #(
+    .ShareMemAddr                   (ShareMemAddr1   ),
+    .PrivateMemAddr0                (PrivateMemAddr0),
+    .PrivateMemAddr1                (PrivateMemAddr1),
+    .PrivateMemAddr2                (PrivateMemAddr2),
+    .PrivateMemAddr3                (PrivateMemAddr3)
+)   Pool    (
+    .clk                            (clk),
+    .rstn                           (rstn),
+
+    .select                         (PoolAddrSel),
+    .Height_i                       (PoolHeight),
+    .DataBp_i                       (PoolDataBp),
+    .WeightBp_i                     (PoolWeightBp),
+    .ResultBp_i                     (PoolResultBp),
+    .Poolmod                        (PoolMod),
+    .Req_i                          (PoolReq),
+    .Ack_o                          (PoolAck),
+
+    .Addr_o                         (PoolAddr),
+    .Read_o                         (PoolRead),
+    .Write_o                        (PoolWrite),
+    .ByteEnable_o                   (PoolByteEnable),
+    .WriteData_o                    (PoolWriteData),
+    .ReadData_i                     (PoolReadData),
+    .Lock_o                         (PoolLock),
+    .WaitReq_i                      (PoolWaitReq)
+);
+
+wire    [63:0]          FullAddr;
+wire                    FullRead;
+wire                    FullWrite;
+wire    [63:0]         FullByteEnable;
+wire    [511:0]        FullWriteData;
+wire    [511:0]        FullReadData;
+wire                    FullLock;
+wire                    FullWaitReq;
+
+FullConnect #(
+    .ShareMemAddr                   (ShareMemAddr0   ),
+    .PrivateMemAddr0                (PrivateMemAddr0),
+    .PrivateMemAddr1                (PrivateMemAddr1),
+    .PrivateMemAddr2                (PrivateMemAddr2),
+    .PrivateMemAddr3                (PrivateMemAddr3)
+)   FC  (
+    .clk                            (clk),
+    .rstn                           (rstn),
+
+    .addr_sel                       (FullAddrSel),
+    .Accu_i                         (FullAccu),
+    .Height_i                       (FullHeight),
+    .DataBp_i                       (FullDataBp),
+    .WeightBp_i                     (FullWeightBp),
+    .ResultBp_i                     (FullResultBp),
+    .CoreEnable_i                   (1'b1),
+    .Req_i                          (FullReq),
+    .Ack_o                          (FullAck),
+
+    .AvalonAddr_o                   (FullAddr),
+    .AvalonRead_o                   (FullRead),
+    .AvalonWrite_o                  (FullWrite),
+    .AvalonByteEnable_o             (FullByteEnable),
+    .AvalonWriteData_o              (FullWriteData),
+    .AvalonReadData_i               (FullReadData),
+    .AvalonLock_o                   (FullLock),
+    .AvalonWaitReq_i                (FullWaitReq)
+);
+
+wire    [63:0]          MasterAddr;
+wire                    MasterRead;
+wire                    MasterWrite;
+wire    [63:0]         MasterByteEnable;
+wire    [511:0]        MasterWriteData;
+wire    [511:0]        MasterReadData;
+wire                    MasterLock;
+wire                    MasterWaitReq;
+
+AvalonBusUpSizer ABUS (
+    .clk                            (clk),
+    .rstn                           (rstn),
+
+    .SlaveAddr_i                    (AvalonAddr_i),
+    .SlaveRead_i                    (AvalonRead_i),
+    .SlaveWrite_i                   (AvalonWrite_i),
+    .SlaveByteEnable_i              (AvalonByteEnable_i),
+    .SlaveWriteData_i               (AvalonWriteData_i),
+    .SlaveReadData_o                (AvalonReadData_o),
+    .SlaveWaitReq_o                 (AvalonWaitReq_o),
+
+    .MasterAddr_o                   (MasterAddr),
+    .MasterRead_o                   (MasterRead),
+    .MasterWrite_o                  (MasterWrite),
+    .MasterByteEnable_o             (MasterByteEnable),
+    .MasterWriteData_o              (MasterWriteData),
+    .MasterReadData_i               (MasterReadData),
+    .MasterWaitReq_i                (MasterWaitReq)
+);
+
+
+wire    [63:0]          Slave0Addr;
+wire                    Slave0Read;
+wire                    Slave0Write;
+wire    [63:0]         Slave0ByteEnable;
+wire    [511:0]        Slave0WriteData;
+wire    [511:0]        Slave0ReadData;
+wire                    Slave0WaitReq;
+
+wire    [63:0]          Slave1Addr;
+wire                    Slave1Read;
+wire                    Slave1Write;
+wire    [63:0]          Slave1ByteEnable;
+wire    [511:0]         Slave1WriteData;
+wire    [511:0]         Slave1ReadData;
+wire                    Slave1WaitReq;
+
+wire    [63:0]          Slave2Addr;
+wire                    Slave2Read;
+wire                    Slave2Write;
+wire    [63:0]          Slave2ByteEnable;
+wire    [511:0]         Slave2WriteData;
+wire    [511:0]         Slave2ReadData;
+wire                    Slave2WaitReq;
+
+AvalonBusMatrix MTX(
+    .clk                            (clk),
+    .rstn                           (rstn),
+
+    .Master0Addr_i                  (ConvAddr),
+    .Master0ByteEn_i                (ConvByteEnable),
+    .Master0RdEn_i                  (ConvRead),
+    .Master0WrEn_i                  (ConvWrite),
+    .Master0WrData_i                (ConvWriteData),
+    .Master0RdData_o                (ConvReadData),
+    .Master0WaitReq_o               (ConvWaitReq),
+
+    .Master1Addr_i                  (BiasReLUAddr),
+    .Master1ByteEn_i                (BiasReLUByteEnable),
+    .Master1RdEn_i                  (BiasReLURead),
+    .Master1WrEn_i                  (BiasReLUWrite),
+    .Master1WrData_i                (BiasReLUWriteData),
+    .Master1RdData_o                (BiasReLUReadData),
+    .Master1WaitReq_o               (BiasReLUWaitReq),
+	
+    .Master2Addr_i                  (PoolAddr),
+    .Master2ByteEn_i                (PoolByteEnable),
+    .Master2RdEn_i                  (PoolRead),
+    .Master2WrEn_i                  (PoolWrite),
+    .Master2WrData_i                (PoolWriteData),
+    .Master2RdData_o                (PoolReadData),
+    .Master2WaitReq_o               (PoolWaitReq),
+
+    .Master3Addr_i                  (FullAddr),
+    .Master3ByteEn_i                (FullByteEnable),
+    .Master3RdEn_i                  (FullRead),
+    .Master3WrEn_i                  (FullWrite),
+    .Master3WrData_i                (FullWriteData),
+    .Master3RdData_o                (FullReadData),
+    .Master3WaitReq_o               (FullWaitReq),
+	
+    .Master4Addr_i                  (MasterAddr),
+    .Master4ByteEn_i                (MasterByteEnable),
+    .Master4RdEn_i                  (MasterRead),
+    .Master4WrEn_i                  (MasterWrite),
+    .Master4WrData_i                (MasterWriteData),
+    .Master4RdData_o                (MasterReadData),
+    .Master4WaitReq_o               (MasterWaitReq),	
+
+    .Slave0Addr_o                   (Slave0Addr),
+    .Slave0ByteEn_o                 (Slave0ByteEnable),
+    .Slave0RdEn_o                   (Slave0Read),
+    .Slave0WrEn_o                   (Slave0Write),
+    .Slave0WrData_o                 (Slave0WriteData),
+    .Slave0RdData_i                 (Slave0ReadData),
+    .Slave0WaitReq_i                (Slave0WaitReq),
+
+    .Slave1Addr_o                   (Slave1Addr      ),
+    .Slave1ByteEn_o                 (Slave1ByteEnable),
+    .Slave1RdEn_o                   (Slave1Read      ),
+    .Slave1WrEn_o                   (Slave1Write     ),
+    .Slave1WrData_o                 (Slave1WriteData ),
+    .Slave1RdData_i                 (Slave1ReadData  ),
+    .Slave1WaitReq_i                (Slave1WaitReq   ),
+	 
+	//	Slave 2 Signals
+	 .Slave2Addr_o                   (Slave2Addr      ),
+	 .Slave2ByteEn_o                 (Slave2ByteEnable),
+	 .Slave2RdEn_o                   (Slave2Read      ),
+	 .Slave2WrEn_o                   (Slave2Write     ),
+	 .Slave2WrData_o                 (Slave2WriteData ),
+	 .Slave2RdData_i                 (Slave2ReadData  ),
+	 .Slave2WaitReq_i	               (Slave2WaitReq   )
+);
+
+AvalonMem   #(
+    .WgtPresent                     (1),
+    .NmcPresent                     (0)
+)   WeigthMem   (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .AvalonAddr_i                   (Slave0Addr),
+    .AvalonRead_i                   (Slave0Read),
+    .AvalonWrite_i                  (Slave0Write),
+    .AvalonByteEnable_i             (Slave0ByteEnable),
+    .AvalonReadData_o               (Slave0ReadData),
+    .AvalonWriteData_i              (Slave0WriteData),
+    .AvalonWaitReq_o                (Slave0WaitReq),
+    .AvalonLock_i                   (1'b0)
+);
+
+AvalonMem   #(
+    .WgtPresent                     (0),
+    .NmcPresent                     (0)
+)   ShareMem0   (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .AvalonAddr_i                   (Slave1Addr),
+    .AvalonRead_i                   (Slave1Read),
+    .AvalonWrite_i                  (Slave1Write),
+    .AvalonByteEnable_i             (Slave1ByteEnable),
+    .AvalonReadData_o               (Slave1ReadData),
+    .AvalonWriteData_i              (Slave1WriteData),
+    .AvalonWaitReq_o                (Slave1WaitReq),
+    .AvalonLock_i                   (1'b0)
+);
+
+AvalonMem   #(
+    .WgtPresent                     (0),
+    .NmcPresent                     (1)
+)   ShareMem1   (
+    .clk                            (clk),
+    .rstn                           (rstn),
+    .AvalonAddr_i                   (Slave2Addr),
+    .AvalonRead_i                   (Slave2Read),
+    .AvalonWrite_i                  (Slave2Write),
+    .AvalonByteEnable_i             (Slave2ByteEnable),
+    .AvalonReadData_o               (Slave2ReadData),
+    .AvalonWriteData_i              (Slave2WriteData),
+    .AvalonWaitReq_o                (Slave2WaitReq),
+    .AvalonLock_i                   (1'b0)
+);
+
+endmodule

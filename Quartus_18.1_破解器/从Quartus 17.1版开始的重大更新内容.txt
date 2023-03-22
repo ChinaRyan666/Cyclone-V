@@ -1,0 +1,23 @@
+从Quartus 17.1版开始的重大更新内容：
+
+1. 增加了Stratix 10系列的器件库（Intel 真14nm工艺生产，内核速度直接上1GHz，号称全世界最快的FPGA）
+2. 集成了HLS编译器（免费），用于C/C++开发FPGA，主要用于信号处理和/或科学计算类设计应用，和一样用C/C++开发FPGA的OpenCL（免费）有一些区别。
+3. 把一些Quartus内部集成的功能名字改了，让用户特别是初学者更容易理解这些功能的用处：
+
+
+旧的名字	新的名字
+
+Blueprint	Interface Planner
+Qsys		Platform Designer
+EyeQ		Eye Viewer
+JNEye		Advanced Link Analyzer
+LogicLock	Logic Lock Region
+TimeQuest	Timing Analyzer
+
+
+破解器增加了抗single-event upset (SEU，可以翻译成单粒子翻转)的license内容，这个对某国禁运的功能支持2009年以后的大部分新器件，对于航空、航天、兵器、核工业、电力、高铁、医疗仪器等等要求高可靠性的产品非常有价值。当然，这个license一样可以用在老版本的Quartus上，但是必需是用破解器破解过的Quartus，正版license是没有这个功能的，原因你懂得！SEU使用方法请参考器件的英文版数据手册，或者找骏龙科技要各个新系列FPGA的中文版的手册。
+
+和这个SEU功能类似的还有加密功能的license，可以按照美国国防部标准的256位AES加密算法加密大部分新FPGA，至今还无人能解密，需要者自己联系骏龙科技。本人暂时不加入，因为这些太敏感的禁运东西加入太多了怕出问题。
+
+
+
